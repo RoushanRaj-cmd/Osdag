@@ -23,8 +23,6 @@ import logging
 
 import math
 import os
-from importlib.resources import files
-
 
 class ButtJointBolted(MomentConnection):
     def __init__(self):
@@ -265,9 +263,8 @@ class ButtJointBolted(MomentConnection):
         t00 = (None, "", TYPE_NOTE, "Representative Image for Spacing Details - 3 x 3 pattern considered")
         spacing.append(t00)
 
-        # Use a default image path that exists in the project
         t99 = (None, 'Spacing Details', TYPE_SECTION,
-            [str(files("osdag.data.ResourceFiles.images").joinpath("ButtJointBolted.png")), 400, 277, ""])  # [image, width, height, caption]
+            [str(files("osdag.data.ResourceFiles.images").joinpath("spacing_3.png")), 400, 277, ""])  # [image, width, height, caption]
         spacing.append(t99)
 
         t9 = (KEY_OUT_PITCH, KEY_OUT_DISP_PITCH, TYPE_TEXTBOX, self.plate.gauge_provided if status else '')
@@ -409,12 +406,6 @@ class ButtJointBolted(MomentConnection):
     #             chkbox.setChecked(Qt.Unchecked)
     #     ui.commLogicObj.display_3DModel("Cover Plate", bgcolor)
 
-    def get_3d_image_path(self):
-        image_path = "./ResourceFiles/images/3d.png"
-        fallback_image = str(files("osdag.data.ResourceFiles.images").joinpath("ButtJointBolted.png"))
-        if not os.path.exists(image_path):
-            return fallback_image
-        return image_path
 
     def call_3DPlate(self, ui, bgcolor):
         # Temporarily disabled 3D functionality
@@ -651,13 +642,10 @@ class ButtJointBolted(MomentConnection):
                                                   p=float(self.bolt.min_pitch_round))
 
                         num_bolts = float(self.tensile_force) / ( self.bolt.bolt_capacity / 1000)
-                        
-                        #if num_bolts <= 2:
-                        #    self.bolt_dia_grade_status = True
-                        #    break
-                        # Accept any valid combination, not just those with <= 2 bolts
-                        self.bolt_dia_grade_status = True
-                        break   
+
+                        if num_bolts <= 2:
+                            self.bolt_dia_grade_status = True
+                            break
 
                     except Exception as e:
                         logger.error(f"Error in bolt calculations: {str(e)}")
@@ -1138,4 +1126,4 @@ class ButtJointBolted(MomentConnection):
             except Exception as e2:
                 logger.error(f"Critical error in save_design: {str(e2)}")
                 raise
-
+        return True
