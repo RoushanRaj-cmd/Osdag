@@ -26,6 +26,7 @@ from .items.rect_hollow import RectHollow
 from .items.circular_hollow import CircularHollow
 from .items.double_angles import BackToBackAnglesWithGussetsSameSide
 from .items.double_angles import BackToBackAnglesWithGussetsOppSide
+from .items.purlin import *
 
 from .ShearConnections.FinPlate.beamWebBeamWebConnectivity import BeamWebBeamWeb as FinBeamWebBeamWeb
 from .ShearConnections.FinPlate.colFlangeBeamWebConnectivity import ColFlangeBeamWeb as FinColFlangeBeamWeb
@@ -144,6 +145,9 @@ from OCC.Core.Quantity import Quantity_NOC_GRAY25 as GRAY
 # from OCC.Display.OCCViewer import V3d_XposYnegZneg
 from OCC.Core.TNaming import tnaming
 import multiprocessing
+from OCC.Core.Geom import Geom_CartesianPoint
+from OCC.Core.AIS import AIS_Point
+from OCC.Core.Quantity import Quantity_Color, Quantity_TOC_RGB
 
 # from Connections.Shear.Finplate.drawing_2D import FinCommonData
 # from Connections.Shear.Endplate.drawing_2D import EndCommonData
@@ -583,6 +587,17 @@ class CommonDesignLogic(object):
             # A = CleatAngleConnection()
             angle = Angle(L=A.cleat.height, A=A.cleat.leg_a_length, B=A.cleat.leg_b_length, T=A.cleat.thickness,
                           R1=A.cleat.root_radius, R2=A.cleat.toe_radius)
+            print("BOLT DETAILS")
+            print("bolt:", A.bolt)
+            print("bolt2:", A.bolt2)
+            print("spting_leg.bolts_one_line:", A.spting_leg.bolts_one_line)
+            print("spting_leg.bolt_line:", A.spting_leg.bolt_line)
+            print("total_bolts_spting:", A.total_bolts_spting)
+            print("get_bolt_PC:", A.get_bolt_PC)
+            print("bolt_values:", A.bolt_values)
+            print("END BOLT DETAILS")
+
+
         elif self.connection == KEY_DISP_SEATED_ANGLE:
             angle = Angle(L=A.seated_angle.width, A=A.seated.leg_a_length, B=A.seated.leg_b_length,
                           T=A.seated.thickness, R1=A.seated.root_radius, R2=A.seated.toe_radius)
@@ -945,6 +960,28 @@ class CommonDesignLogic(object):
         :return: creates CAD model
         """
         BCE = self.module_class
+
+
+
+        print("bolt_diameter_provided:", BCE.bolt_diameter_provided)
+        print("bolt_grade_provided:", BCE.bolt_grade_provided)
+        print("bolt_numbers:", BCE.bolt_numbers)
+        print("BCE.ep_height_provided:", BCE.ep_height_provided)
+        print("BCE.ep_width_provided:", BCE.ep_width_provided)
+
+        print("BCE.edge_distance_provided:", BCE.edge_distance_provided)
+        print("BCE.end_distance_provided:", BCE.end_distance_provided)
+        print("BCE.endplate_type:", BCE.endplate_type)
+        print("BCE.ep_height_max:", BCE.ep_height_max)
+        print("BCE.epsilon_beam:", BCE.epsilon_beam)
+        print("BCE.plate_thickness:", BCE.plate_thickness)
+
+
+
+
+
+
+
 
         column_tw = float(BCE.column_tw)
         column_T = float(BCE.column_tf)
@@ -1902,6 +1939,28 @@ class CommonDesignLogic(object):
 
         return sec
 
+    def createPurlin(self):
+
+        Flex = self.module_class
+        print(f"This is the module name {Flex}")
+
+        Flex.section_property = Flex.section_connect_database(Flex, Flex.result_designation)
+        print(f"Flex.section_property.web_thickness : {Flex.section_property.web_thickness}")
+        print(f"Flex.section_property.flange_thickness : {Flex.section_property.flange_thickness}")
+        print(f"Flex.section_property.depth : {Flex.section_property.depth}")
+        print(f"Flex.section_property.flange_width : {Flex.section_property.flange_width}")
+        print(f"Flex.section_property.root_radius : {Flex.section_property.root_radius}")
+        print(f"Flex.section_property.toe_radius : {Flex.section_property.toe_radius}")
+        print(f"Flex.support : {Flex.support}")
+        print(dir(Flex.section_property))
+        purlin=create_c_section(length = Flex.length*1000,
+        depth = Flex.section_property.depth,
+        flange_width = Flex.section_property.flange_width,
+        web_thickness = Flex.section_property.web_thickness,
+        flange_thickness = Flex.section_property.flange_thickness)
+
+        return purlin
+
     def createStrutsInTrusses(self):
         Col = self.module_class
         Col.section_property = AngleComponent(designation = Col.result_designation, material_grade = Col.material)
@@ -2367,6 +2426,14 @@ class CommonDesignLogic(object):
             if self.component == "Model":
                 osdag_display_shape(self.display, self.FObj, update=True)
 
+        elif self.mainmodule == 'Flexural Members - Purlins':
+            self.flex = self.module_class()
+            print(f"THIS IS SELF.MODULE_CLASS {self.flex}")
+            self.FObj = self.createPurlin()
+
+            if self.component == "Model":
+                osdag_display_shape(self.display, self.FObj, update=True)
+
         elif self.mainmodule == 'Struts in Trusses':
             self.col = self.module_class()
             self.ColObj = self.createStrutsInTrusses()
@@ -2538,6 +2605,14 @@ class CommonDesignLogic(object):
         elif self.mainmodule == 'Flexural Members - Cantilever':
             if flag is True:
                 self.FObj = self.createCantileverBeam()
+
+                self.display_3DModel("Model", "gradient_bg")
+            else:
+                self.display.EraseAll()
+
+        elif self.mainmodule == 'Flexural Members - Purlins':
+            if flag is True:
+                self.FObj = self.createPurlin()
 
                 self.display_3DModel("Model", "gradient_bg")
             else:
@@ -2838,5 +2913,3 @@ class CommonDesignLogic(object):
 # if __name__!= "__main__":
 #
 #     CommonDesignLogic()
-
-
