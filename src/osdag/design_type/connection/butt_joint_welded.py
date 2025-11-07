@@ -980,11 +980,11 @@ class ButtJointWelded(MomentConnection):
         logger.info(": ==========End Of Design===========\n")
     
     def save_design(self, popup_summary):
-        """Save design details with proper LaTeX formatting for subscripts and symbols"""
+        """Enhanced save_design with proper compression/tension handling and LaTeX formatting"""
         import os as os_module
         import math
         from pylatex.utils import NoEscape
-        
+
         try:
             if not self.design_status:
                 print("ERROR: Cannot generate report - design is not complete or failed")
@@ -994,400 +994,195 @@ class ButtJointWelded(MomentConnection):
                 value = getattr(self, attr, default)
                 return default if value is None else value
 
+            # Basic info extraction
+            design_for = safe_get('design_for', 'Tension')
+            is_compression = design_for.lower().startswith('c')
+            force = safe_get('axial_force', safe_get('tensile_force', 0))
+            force_kN = round(force / 1000, 2)
+
+            plate1_thk = safe_get('plate1.thickness[0]', 8.0)
+            plate2_thk = safe_get('plate2.thickness[0]', 8.0)
+            t_min = min(plate1_thk, plate2_thk)
+            fy = safe_get('fy', 250)
+            fu = safe_get('fu', 410)
+            gamma_m0 = safe_get('gamma_m0', 1.1)
+            gamma_m1 = safe_get('gamma_m1', 1.25)
+            gamma_mw = safe_get('gamma_mw', 1.25)
+            weld_size = safe_get('weld_size', 6.0)
+            plates_width = safe_get('plates_width', 40.0)
+            cover_plate = safe_get('cover_plate', 'Single-Cover')
+
+            # Prepare header data
             self.report_input = {
                 KEY_MODULE: getattr(self, 'module', 'Butt Joint Welded Connection'),
                 KEY_DISP_MATERIAL: safe_get('main_material', 'E 250 (Fe 410 W)A'),
-                KEY_DISP_AXIAL: round(safe_get('axial_force', 0)/1000, 2),  # Changed from tensile_force
-                KEY_DISP_DESIGN_FOR: safe_get('design_for', 'Tension'),
-                KEY_DISP_PLATE1_THICKNESS: safe_get('plate1.thickness[0]', 8.0),
-                KEY_DISP_PLATE2_THICKNESS: safe_get('plate2.thickness[0]', 8.0), 
-                KEY_DISP_PLATE_WIDTH: safe_get('plates_width', 20.0),
-                KEY_DISP_COVER_PLT: safe_get('cover_plate', 'Single-Cover'),
-                KEY_DISP_WELD_SIZE: safe_get('weld_size', 6.0),
+                KEY_DISP_AXIAL: force_kN,
+                KEY_DISP_DESIGN_FOR: design_for,
+                KEY_DISP_PLATE1_THICKNESS: plate1_thk,
+                KEY_DISP_PLATE2_THICKNESS: plate2_thk,
+                KEY_DISP_PLATE_WIDTH: plates_width,
+                KEY_DISP_COVER_PLT: cover_plate,
+                KEY_DISP_WELD_SIZE: weld_size,
                 KEY_DISP_DP_WELD_TYPE: safe_get('weld_type', 'Shop weld'),
-                KEY_DISP_DP_WELD_FAB: safe_get('weld_type', 'Shop Weld'),
-                KEY_DISP_DP_WELD_MATERIAL_G_O_REPORT: safe_get('fu', 410.0),
-                KEY_DISP_ULTIMATE_STRENGTH_REPORT: safe_get('fu', 410),
-                KEY_DISP_YIELD_STRENGTH_REPORT: safe_get('fy', 250),
-                KEY_DISP_GAMMA_M0: safe_get('gamma_m0', 1.1),
-                KEY_DISP_GAMMA_M1: safe_get('gamma_m1', 1.25),
-                KEY_DISP_GAMMA_MW: safe_get('gamma_mw', 1.25)
+                KEY_DISP_DP_WELD_MATERIAL_G_O_REPORT: fu,
+                KEY_DISP_ULTIMATE_STRENGTH_REPORT: fu,
+                KEY_DISP_YIELD_STRENGTH_REPORT: fy,
+                KEY_DISP_GAMMA_M0: gamma_m0,
+                KEY_DISP_GAMMA_M1: gamma_m1,
+                KEY_DISP_GAMMA_MW: gamma_mw
             }
 
             self.report_check = []
 
-            if self.design_status:
-                plate1_thk = safe_get('plate1.thickness[0]', 8.0)
-                plate2_thk = safe_get('plate2.thickness[0]', 8.0)
-                t_min = min(plate1_thk, plate2_thk)
-                s_min = safe_get('s_min', 3)
-                s_max = safe_get('s_max', 6.5)
-                weld_size = safe_get('weld_size', 6)
-                fu = safe_get('fu', 410.0)
-                fy = safe_get('fy', 250)
-                gamma_mw = safe_get('gamma_mw', 1.25)
-                gamma_m0 = safe_get('gamma_m0', 1.1)
-                gamma_m1 = safe_get('gamma_m1', 1.25)
-                tensile_force = safe_get('tensile_force', 10000)
-                plates_width = safe_get('plates_width', 20.0)
-                cover_plate = safe_get('cover_plate', 'Single-Cover')
-                
-                f_w = fu / (math.sqrt(3) * gamma_mw)
-                N_f = 2 if "double" in cover_plate.lower() else 1
-                te = 0.707 * weld_size
-                
-                # Cover Plate Design Section
-                t1 = ('SubSection', 'Cover Plate Design', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
-                self.report_check.append(t1)
-                
-                if "double" in cover_plate.lower():
-                    tcp_req = (9.0/16.0) * t_min
-                    tcp_formula = NoEscape(f"\\small t$_{{cp}}$ $\\geq$ 9/16 $\\times$ t$_{{min}}$ $\\geq$ 9/16 $\\times$ {t_min} $\\geq$ {round(tcp_req, 2)}~mm")
-                else:
-                    tcp_req = (5.0/8.0) * t_min  
-                    tcp_formula = NoEscape(f"\\small t$_{{cp}}$ $\\geq$ 5/8 $\\times$ t$_{{min}}$ $\\geq$ 5/8 $\\times$ {t_min} $\\geq$ {round(tcp_req, 2)}~mm")
-                
-                tcp_provided = safe_get('calculated_cover_plate_thickness', 8.0)
-                t1 = ('Cover Plate Thickness', tcp_formula, f'{tcp_provided} mm', 'Pass' if tcp_provided >= tcp_req else 'Fail')
-                self.report_check.append(t1)
+            # --------------------------------------
+            # Section: Weld Design
+            # --------------------------------------
+            t1 = ('SubSection', 'Weld Design', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
+            self.report_check.append(t1)
 
-                # Weld Design Section
-                t1 = ('SubSection', 'Weld Design', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
-                self.report_check.append(t1)
+            s_min = safe_get('s_min', 3)
+            s_max = safe_get('s_max', 6.5)
+            f_w = fu / (math.sqrt(3) * gamma_mw)
+            te = 0.707 * weld_size
+            N_f = 2 if "double" in cover_plate.lower() else 1
+            L_req = force / (N_f * te * f_w) if (N_f * te * f_w) > 0 else 0
 
-                t1 = ('Minimum Weld Size',
-                    NoEscape(f'\\small t$_{{w,min}}$ based on thinner part = max({plate1_thk}, {plate2_thk})~s$_{{min}}$ based on thicker part = {s_min}~[Ref.~IS~800:2007, Table~21, Cl.10.5.2.3]'),
-                    f'{weld_size} mm',
-                    'Pass' if weld_size >= s_min else 'Fail')
-                self.report_check.append(t1)
+            self.report_check.append((
+                'Minimum Weld Size',
+                NoEscape(f'\\small s$_{{min}}$ = {s_min} mm [Ref: IS 800:2007, Table 21]'),
+                f'{weld_size} mm',
+                'Pass' if weld_size >= s_min else 'Fail'
+            ))
 
-                t1 = ('Maximum Weld Size',
-                    NoEscape(f'\\small Thickness of thinner part = min({plate1_thk}, {plate2_thk}) = {t_min}~s$_{{max}}$ = {s_max}~[Ref.~IS~800:2007, Cl.10.5.3.1]'),
-                    f'{weld_size} mm', 
-                    'Pass' if weld_size <= s_max else 'Fail')
-                self.report_check.append(t1)
+            self.report_check.append((
+                'Maximum Weld Size',
+                NoEscape(f'\\small s$_{{max}}$ = {s_max} mm [Ref: IS 800:2007, Cl.10.5.3.1]'),
+                f'{weld_size} mm',
+                'Pass' if weld_size <= s_max else 'Fail'
+            ))
 
-                t1 = ('Weld Design Strength',
-                    NoEscape(f'\\small f$_{{w}}$ = f$_{{u}}$/$\\sqrt{{3}}$ $\\times$ $\\gamma$$_{{mw}}$ = {fu}/$\\sqrt{{3}}$ $\\times$ {gamma_mw} = {round(f_w, 2)}~N/mm$^2$'),
-                    f'{round(f_w, 2)} N/mm²',
-                    'Pass')
-                self.report_check.append(t1)
+            self.report_check.append((
+                'Weld Strength',
+                NoEscape(f'\\small f$_w$ = f$_u$ / (√3 × γ$_{{mw}}$) = {fu}/(√3×{gamma_mw}) = {round(f_w,2)} N/mm²'),
+                f'{round(f_w,2)} N/mm²',
+                'Pass'
+            ))
 
-                L_req = tensile_force / (N_f * te * f_w) if (N_f * te * f_w) > 0 else 0
-                
-                t1 = ('Required Weld Length',
-                    NoEscape(f'\\small L$_{{req}}$ = P/(N$_{{f}}$ $\\times$ t$_{{e}}$ $\\times$ f$_{{w}}$) = {round(tensile_force, 1)}/({N_f} $\\times$ {round(te, 2)} $\\times$ {round(f_w, 2)}) = {round(L_req, 1)}~mm'),
-                    f'{plates_width} mm',
-                    'Pass' if plates_width >= L_req else 'Fail')
-                self.report_check.append(t1)
+            L_eff_min = 4 * weld_size
+            L_eff_provided = plates_width - (2 * weld_size)
+            self.report_check.append((
+                'Effective Weld Length',
+                NoEscape(f'\\small L$_eff$ ≥ 4s = 4×{weld_size} = {L_eff_min} mm'),
+                f'{round(L_eff_provided, 2)} mm',
+                'Pass' if L_eff_provided >= L_eff_min else 'Fail'
+            ))
 
-                L_eff_min = 4 * weld_size
-                L_eff_provided = plates_width - (2 * weld_size)
-                
-                t1 = ('Effective Weld Length', 
-                    NoEscape(f'\\small L$_{{eff}}$ $\\geq$ 4s = 4 $\\times$ {weld_size} = {L_eff_min}~mm~[DDCL~3.5]'),
-                    f'{round(L_eff_provided, 0)} mm',
-                    'Pass' if L_eff_provided >= L_eff_min else 'Fail')
-                self.report_check.append(t1)
+            weld_strength = N_f * te * L_eff_provided * f_w
+            self.report_check.append((
+                'Weld Strength Verification',
+                NoEscape(f'\\small P$_w$ = N$_f$ × t$_e$ × L$_eff$ × f$_w$ = {N_f}×{round(te,2)}×{round(L_eff_provided,2)}×{round(f_w,2)} = {round(weld_strength/1000,2)} kN'),
+                f'{round(weld_strength/1000,2)} kN',
+                'Pass' if weld_strength >= force else 'Fail'
+            ))
 
-                weld_strength = N_f * te * L_eff_provided * f_w
-                
-                t1 = ('Weld Strength Verification',
-                    NoEscape(f'\\small P$_{{weld}}$ = N$_{{f}}$ $\\times$ t$_{{e}}$ $\\times$ L$_{{eff}}$ $\\times$ f$_{{w}}$ = {N_f} $\\times$ {round(te, 2)} $\\times$ {round(L_eff_provided, 1)} $\\times$ {round(f_w, 2)} = {round(weld_strength, 0)}~N'),
-                    f'{round(weld_strength/1000, 2)} kN',
-                    'Pass' if weld_strength >= tensile_force else 'Fail')
-                self.report_check.append(t1)
+            # --------------------------------------
+            # Section: Base Metal Strength
+            # --------------------------------------
+            self.report_check.append(('SubSection', 'Base Metal Strength', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|'))
 
-                # Base Metal Strength Check Section
-                t1 = ('SubSection', 'Base Metal Strength Check', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
-                self.report_check.append(t1)
-
-                A_g = t_min * plates_width
-                A_n = A_g
-                T_dy = A_g * fy / gamma_m0
-                
-                t1 = ('Yielding Strength',
-                    NoEscape(f'\\small As per Cl.~6.2, IS~800:2007 T$_{{dy}}$ = A$_{{g}}$ $\\times$ f$_{{y}}$/$\\gamma$$_{{m0}}$ = {A_g} $\\times$ {fy}/{gamma_m0} = {round(T_dy/1000, 2)}~kN'),
-                    f'{round(T_dy/1000, 2)} kN',
-                    'Pass')
-                self.report_check.append(t1)
-
-                T_du = 0.9 * A_n * fu / gamma_m1
-                
-                t1 = ('Rupture Strength',
-                    NoEscape(f'\\small As per Cl.~6.3, IS~800:2007 T$_{{du}}$ = 0.9 $\\times$ A$_{{n}}$ $\\times$ f$_{{u}}$/$\\gamma$$_{{m1}}$ = 0.9 $\\times$ {A_n} $\\times$ {fu}/{gamma_m1} = {round(T_du/1000, 2)}~kN'),
-                    f'{round(T_du/1000, 2)} kN',
-                    'Pass')
-                self.report_check.append(t1)
-
-                T_db = min(T_dy, T_du)
-                
-                # For base metal capacity section, conditionally format based on design_for
-                if safe_get('design_for') == 'Compression':
-                    t1 = ('Base Metal Capacity',
-                        NoEscape(f'\\small P$_{{d}}$ = A$_{{g}}$ $\\times$ f$_{{y}}$/$\\gamma$$_{{m0}}$ = {A_g} $\\times$ {fy}/{gamma_m0} = {round(T_db/1000, 2)}~kN~[Ref:~IS~800:2007, Cl.7.1.2]'),
-                        f'{round(T_db/1000, 2)} kN',
-                        'Pass')
-                else:
-                    t1 = ('Base Metal Capacity',
-                        NoEscape(f'\\small T$_{{db}}$ = min(T$_{{dy}}$, T$_{{du}}$) = min({round(T_dy/1000, 2)}, {round(T_du/1000, 2)}) = {round(T_db/1000, 2)}~kN~[Ref:~IS~800:2007, Cl.6.2, 6.3]'),
-                        f'{round(T_db/1000, 2)} kN',
-                        'Pass')
-                self.report_check.append(t1)
-
-                # Detailing Requirements Section
-                t1 = ('SubSection', 'Detailing Requirements', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
-                self.report_check.append(t1)
-
-                t1 = ('Minimum End Clearance',
-                    NoEscape('\\small End clearance $\\geq$ 25~mm~[DDCL~3.8]'),
-                    '25 mm provided',
-                    'Pass')
-                self.report_check.append(t1)
-
-                return_weld_min = max(2 * weld_size, 10)
-                t1 = ('Return Weld Length',
-                    NoEscape(f'\\small Return weld $\\geq$ max(2s, 10) = max({2*weld_size}, 10) = {return_weld_min}~mm~[IS~800:2007, Cl.~10.5.10.2]'),
-                    f'{return_weld_min} mm provided',
-                    'Pass')
-                self.report_check.append(t1)
-
-                # Design Summary Section
-                t1 = ('SubSection', 'Design Summary', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
-                self.report_check.append(t1)
-
-                overall_capacity = min(weld_strength, T_db)
-                t1 = ('Overall Capacity',
-                    NoEscape(f'\\small min(Weld Capacity, Base Metal Capacity) = min({round(weld_strength/1000, 2)}, {round(T_db/1000, 2)}) = {round(overall_capacity/1000, 2)}~kN'),
-                    f'{round(overall_capacity/1000, 2)} kN',
-                    'Pass')
-                self.report_check.append(t1)
-
-                utilization_ratio = tensile_force / overall_capacity if overall_capacity > 0 else 0
-                t1 = ('Utilization Ratio',
-                    NoEscape(f'\\small UR = Applied Force / Design Capacity $\\leq$ 1.0 UR = P$_{{N}}$/min(C$_{{w}}$, T$_{{db}}$) = {round(tensile_force, 1)}/min({round(weld_strength, 0)}, {round(T_db, 0)}) = {round(utilization_ratio, 3)}'),
-                    f'{round(utilization_ratio, 3)}',
-                    'Pass' if utilization_ratio <= 1.0 else 'Fail')
-                self.report_check.append(t1)
-
-                overall_pass = (tensile_force <= overall_capacity and 
-                            utilization_ratio <= 1.0 and 
-                            weld_size >= s_min and 
-                            weld_size <= s_max and 
-                            L_eff_provided >= L_eff_min)
-                
-                t1 = ('Overall Design Status',
-                    'All design checks must pass',
-                    'Connection is SAFE for applied loads' if overall_pass else 'Connection FAILS',
-                    'Pass' if overall_pass else 'Fail')
-                self.report_check.append(t1)
-
+            A_g = t_min * plates_width
+            if is_compression:
+                # Compression check as per Cl. 7.1.2
+                P_d = A_g * fy / gamma_m0
+                self.report_check.append((
+                    'Base Metal Capacity (Compression)',
+                    NoEscape(f'\\small P$_d$ = A$_g$ × f$_y$/γ$_{{m0}}$ = {A_g:.1f}×{fy}/{gamma_m0} = {round(P_d/1000,2)} kN [IS 800:2007, Cl.7.1.2]'),
+                    f'{round(P_d/1000,2)} kN',
+                    'Pass' if P_d >= force else 'Fail'
+                ))
+                T_db = P_d
             else:
-                t1 = ('SubSection', 'Design Status', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
-                self.report_check.append(t1)
-                t1 = ('Design Status', 'Design calculation failed or not performed', 'Design Fails', 'Fail')
-                self.report_check.append(t1)
+                # Tension as per Cl. 6.2, 6.3
+                T_dy = A_g * fy / gamma_m0
+                T_du = 0.9 * A_g * fu / gamma_m1
+                T_db = min(T_dy, T_du)
+                self.report_check.append((
+                    'Base Metal Capacity (Tension)',
+                    NoEscape(f'\\small min(T$_{{dy}}$, T$_{{du}}$) = min({round(T_dy/1000,2)}, {round(T_du/1000,2)}) = {round(T_db/1000,2)} kN [IS 800:2007, Cl.6.2–6.3]'),
+                    f'{round(T_db/1000,2)} kN',
+                    'Pass' if T_db >= force else 'Fail'
+                ))
 
-            required_fields = {
-                'ProjectTitle': 'Welded Butt Joint Design Report',
-                'Subtitle': 'Structural Steel Connection Design', 
-                'JobNumber': 'JOB-001',
-                'Client': 'Client Name',
-                'AdditionalComments': 'Design completed successfully. All design checks conform to IS 800:2007 provisions. Connection is safe for the applied loads.',
-                'ProfileSummary': {
-                    'CompanyName': 'Engineering Consultant',
-                    'CompanyLogo': '',
-                    'Group/TeamName': 'Structural Design Team', 
-                    'Designer': 'Design Engineer'
-                },
-                'does_design_exist': self.design_status,
-                'logger_messages': 'INFO: Design completed successfully'
-            }
-            
-            for field, default_value in required_fields.items():
-                if field not in popup_summary or not popup_summary[field]:
-                    popup_summary[field] = default_value
+            # --------------------------------------
+            # Section: Summary
+            # --------------------------------------
+            self.report_check.append(('SubSection', 'Design Summary', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|'))
 
-            if 'ProfileSummary' not in popup_summary:
-                popup_summary['ProfileSummary'] = {}
-            for key, value in required_fields['ProfileSummary'].items():
-                if key not in popup_summary['ProfileSummary']:
-                    popup_summary['ProfileSummary'][key] = value
+            overall_capacity = min(weld_strength, T_db)
+            utilization = force / overall_capacity if overall_capacity > 0 else 0
 
-            fname_no_ext = popup_summary.get('filename', 'welded_butt_joint_comprehensive_report')
-            fname_no_ext = os_module.path.basename(fname_no_ext)
+            self.report_check.append((
+                'Overall Capacity',
+                NoEscape(f'\\small min(Weld, Base Metal) = min({round(weld_strength/1000,2)}, {round(T_db/1000,2)}) = {round(overall_capacity/1000,2)} kN'),
+                f'{round(overall_capacity/1000,2)} kN',
+                'Pass'
+            ))
+            self.report_check.append((
+                'Utilization Ratio',
+                NoEscape(f'\\small η = P / C = {round(force_kN,2)} / {round(overall_capacity/1000,2)} = {round(utilization,3)}'),
+                f'{round(utilization,3)}',
+                'Pass' if utilization <= 1.0 else 'Fail'
+            ))
+
+            self.report_check.append((
+                'Overall Design Status',
+                'All design checks must pass',
+                'SAFE' if utilization <= 1.0 else 'UNSAFE',
+                'Pass' if utilization <= 1.0 else 'Fail'
+            ))
+
+            # --------------------------------------
+            # Report metadata and PDF creation
+            # --------------------------------------
+            popup_summary.setdefault('ProjectTitle', 'Butt Joint Welded Connection Report')
+            popup_summary.setdefault('Subtitle', 'Structural Steel Connection Design')
+            popup_summary.setdefault('Client', 'Client Name')
+            popup_summary.setdefault('AdditionalComments', 'All design checks conform to IS 800:2007 provisions.')
+
+            fname_no_ext = popup_summary.get('filename', 'Butt_Joint_Welded_Report')
             folder = popup_summary.get('folder', './reports')
-            
             os_module.makedirs(folder, exist_ok=True)
 
-            try:
-                from ...design_report.reportGenerator_latex import CreateLatex
-                latex = CreateLatex()
-                
-                Disp_2d_image = []
-                Disp_3D_image_path = ""
-                
-                result = latex.save_latex(
-                    self.report_input,
-                    self.report_check,
-                    popup_summary,
-                    fname_no_ext,
-                    folder,
-                    Disp_2d_image,
-                    Disp_3D_image_path,
-                    getattr(self, 'module', 'ButtJointWelded')
-                )
-                
-                pdf_file_path = os_module.path.join(folder, f"{fname_no_ext}.pdf")
-                if os_module.path.exists(pdf_file_path):
-                    file_size = os_module.path.getsize(pdf_file_path)
-                    print(f"SUCCESS: Report generated: {pdf_file_path} ({file_size} bytes)")
-                    return True
-                else:
-                    print("ERROR: PDF not found")
-                    return False
-                    
-            except Exception as e:
-                print(f"ERROR: {e}")
-                import traceback
-                traceback.print_exc()
+            from ...design_report.reportGenerator_latex import CreateLatex
+            latex = CreateLatex()
+            Disp_2d_image = [
+                "/ResourceFiles/images/top.png",
+                "/ResourceFiles/images/side.png",
+                "/ResourceFiles/images/front.png"
+            ]
+
+            Disp_3D_image = "/ResourceFiles/images/3d.png"
+
+            latex.save_latex(
+                self.report_input,
+                self.report_check,
+                popup_summary,
+                fname_no_ext,
+                os.path.abspath(".").replace("\\", "/"),
+                Disp_2d_image,
+                Disp_3D_image,
+                getattr(self, 'module', 'ButtJointWelded')
+            )
+
+            pdf_path = os_module.path.join(folder, f"{fname_no_ext}.pdf")
+            if os_module.path.exists(pdf_path):
+                print(f"SUCCESS: Report generated at {pdf_path}")
+                return True
+            else:
+                print("ERROR: Report PDF not found")
                 return False
-                    
+
         except Exception as e:
-            print(f"CRITICAL ERROR: {e}")
+            print(f"CRITICAL ERROR in save_design(): {e}")
             return False
-            
-        """Save design details for report generation"""
-
-        # Report input dictionary
-        self.report_input = {
-            KEY_MODULE: self.module,
-            KEY_MAIN_MODULE: self.mainmodule,
-            
-            # Connection details
-            KEY_DISP_AXIAL: round(self.tensile_force/1000, 2),  # Convert N to kN
-            KEY_DISP_DESIGN_FOR: self.design_for,
-            
-            # Connecting Members
-            "Connecting Members": "TITLE",
-            KEY_DISP_PLATETHK: str([int(d) for d in [self.plate1.thickness[0], self.plate2.thickness[0]]]),
-            KEY_DISP_MATERIAL: self.main_material,
-            KEY_DISP_ULTIMATE_STRENGTH_REPORT: self.plate1.fu,
-            KEY_DISP_YIELD_STRENGTH_REPORT: self.plate1.fy,
-            KEY_DISP_PLATE_WIDTH: self.plates_width,
-            
-            # Weld Details
-            "Weld Details - Input and Design Preference": "TITLE",
-            KEY_DISP_DP_WELD_TYPE: self.weld_type,
-            KEY_DISP_DP_WELD_FAB: self.weld.fabrication,
-            KEY_DISP_DP_WELD_MATERIAL_G_O_REPORT: self.weld.fu,
-            KEY_DISP_WELD_SIZE: self.weld_size,
-
-            # Safety Factors
-            "Safety Factors": "TITLE",
-            KEY_DISP_GAMMA_M0: self.gamma_m0,
-            KEY_DISP_GAMMA_M1: self.gamma_m1,
-            KEY_DISP_GAMMA_MW: self.gamma_mw
-        }
-
-        self.report_check = []
-
-        # Selected Member Data
-        t1 = ('Selected', 'Selected Member Data', '|p{5cm}|p{2cm}|p{2cm}|p{2cm}|p{4cm}|')
-        self.report_check.append(t1)
-
-        if self.design_status:
-            # Member Check
-            t1 = ('SubSection', 'Member Check', '|p{2.5cm}|p{4.5cm}|p{7.5cm}|p{1cm}|')
-            self.report_check.append(t1)
-
-            t1 = (KEY_DISP_TENSION_YIELDCAPACITY, '', 
-                  cl_6_2_tension_yield_capacity_member(l=None, t=None, f_y=self.plate1.fy, gamma=self.gamma_m0,
-                                                     T_dg=round(self.T_db/1000, 2), area=self.A_g), '')
-            self.report_check.append(t1)
-
-            # Weld Design
-            t1 = ('SubSection', 'Weld Design', '|p{3cm}|p{6.5cm}|p{5cm}|p{1cm}|')
-            self.report_check.append(t1)
-
-            t1 = (DISP_MIN_WELD_SIZE, 
-                  cl_10_5_2_3_min_fillet_weld_size_required(self.weld_connecting_plates, self.weld.min_weld, self.weld.red),
-                  display_prov(self.weld_size, "s"),
-                  get_pass_fail(self.weld.min_weld, self.weld_size, relation="leq"))
-            self.report_check.append(t1)
-
-            t1 = (DISP_MAX_WELD_SIZE,
-                  cl_10_5_3_1_max_weld_size(self.weld_connecting_plates, self.weld_size_max),
-                  display_prov(self.weld_size, "s"),
-                  get_pass_fail(self.weld_size, self.weld_size_max, relation="leq"))
-            self.report_check.append(t1)
-
-            t1 = (DISP_THROAT, 
-                  cl_10_5_3_1_throat_thickness_req(),
-                  cl_10_5_3_1_throat_thickness_weld(self.weld_size, self.Kt),
-                  get_pass_fail(3.0, self.weld_size, relation="leq"))
-            self.report_check.append(t1)
-
-            t1 = (DISP_EFF, "", 
-                  display_prov(self.weld_length_effective, "l_w"), "")
-            self.report_check.append(t1)
-
-            t1 = (DISP_WELD_STRENGTH,
-                  weld_strength_req(V=0.0, A=self.tensile_force, M=0.0, Ip_w=1.0,
-                                  y_max=0.0, x_max=0.0, l_w=self.weld_length_effective,
-                                  R_w=self.weld.stress),
-                  cl_10_5_7_1_1_weld_strength(weld_conn_plates_fu=[self.fu], gamma_mw=self.gamma_mw,
-                                            t_t=round(self.weld.throat, 2),
-                                            f_w=round(self.weld.strength, 2)),
-                  get_pass_fail(self.weld.stress, self.weld.strength, relation="leq"))
-            self.report_check.append(t1)
-
-            # Long joint check if applicable
-            if hasattr(self, 'beta_L'):
-                t1 = (KEY_OUT_LONG_JOINT_WELD, long_joint_welded_req(),
-                      cl_10_5_7_3_weld_strength_post_long_joint(h=self.plates_width, 
-                                                              l=self.weld_length_provided,
-                                                              t_t=self.weld.throat,
-                                                              ws=self.weld.strength,
-                                                              wsr=self.weld.strength_red), "")
-                self.report_check.append(t1)
-
-                t1 = (KEY_OUT_DISP_RED_WELD_STRENGTH, 
-                      display_prov(round(self.weld.stress, 2), "f_w"),
-                      display_prov(round(self.weld.strength_red, 2), "f_wd"),
-                      get_pass_fail(self.weld.stress, self.weld.strength_red, relation="leq"))
-                self.report_check.append(t1)
-
-            # Final Checks
-            t1 = ('SubSection', 'Capacity Checks', '|p{3.5cm}|p{4.5cm}|p{6cm}|p{1.5cm}|')
-            self.report_check.append(t1)
-
-            t1 = ('Base Metal Strength (kN)', 
-                  display_prov(round(self.tensile_force/1000, 2), "P"),
-                  display_prov(round(self.T_db/1000, 2), "T_db"),
-                  get_pass_fail(self.tensile_force, self.T_db, relation="leq"))
-            self.report_check.append(t1)
-
-            t1 = ('Overall Utilization Ratio', 
-                  required_IR_or_utilisation_ratio(IR=1),
-                  display_prov(round(self.utilization_ratio, 3), "IR"),
-                  get_pass_fail(self.utilization_ratio, 1, relation="leq"))
-            self.report_check.append(t1)
-
-        else:
-            t1 = ('SubSection', 'Design Status', '|p{3.5cm}|p{4.5cm}|p{6cm}|p{1.5cm}|')
-            self.report_check.append(t1)
-            t1 = ('Design Status', '', 'Design Fails', 'Fail')
-            self.report_check.append(t1)
-
-        # Images
-        Disp_2d_image = []
-        Disp_3D_image = "/ResourceFiles/images/3d.png"
-
-        rel_path = os.path.abspath(".")
-        rel_path = rel_path.replace("\\", "/")
-
-        fname_no_ext = popup_summary['filename']
-
-        CreateLatex.save_latex(CreateLatex(), self.report_input, self.report_check, popup_summary,
-                             fname_no_ext, rel_path, Disp_2d_image, Disp_3D_image, module=self.module)
+        return True
