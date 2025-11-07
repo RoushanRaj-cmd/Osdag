@@ -549,65 +549,87 @@ class LapJointWelded(MomentConnection):
         self.weld_strength = self.design_capacity
         self.weld_length_effective = self.l_eff
 
-    def save_design(self, popup_summary):
+    def save_design(self, *args):
+        """
+        Handles both old (save_design(main, popup_summary)) and new (save_design(popup_summary)) patterns.
+        Generates compression/tension-aware report correctly.
+        """
+        # --- Handle arguments ---
+        if len(args) == 1:
+            popup_summary = args[0]
+        elif len(args) == 2:
+            _, popup_summary = args
+        else:
+            raise TypeError("save_design() expects 1 or 2 arguments (main, popup_summary)")
+
+        # --- Report Input Parameters ---
+        force_label = "Compression Force (kN)" if self.design_for == 'Compression' else "Tensile Force (kN)"
         self.report_input = {
-            KEY_MODULE: self.module,
-            KEY_MAIN_MODULE: self.mainmodule,
-            KEY_DISP_AXIAL: round(self.axial_force / 1000, 2),
-            KEY_DISP_DESIGN_FOR: self.design_for,
-            KEY_DISP_PLATETHK: str([int(d) for d in [self.plate1.thickness[0], self.plate2.thickness[0]]]),
-            KEY_DISP_MATERIAL: self.main_material,
-            KEY_DISP_ULTIMATE_STRENGTH_REPORT: self.plate1.fu,
-            KEY_DISP_YIELD_STRENGTH_REPORT: self.plate1.fy,
-            KEY_DISP_PLATE_WIDTH: self.width,
-            "Weld Details - Input and Design Preference": "TITLE",
-            KEY_DISP_DP_WELD_TYPE: self.weld.type,
-            KEY_DISP_DP_WELD_FAB: self.weld.fabrication,
-            KEY_DISP_DP_WELD_MATERIAL_G_O_REPORT: self.weld.fu,
-            KEY_DISP_WELD_SIZE: self.weld_size,
-            "Safety Factors": "TITLE",
-            KEY_DISP_GAMMA_MW: self.gamma_mw,
-            "Weld Angle (deg)": getattr(self, 'weld_angle', 45),
+            "Module": self.module,
+            "Main Module": self.mainmodule,
+            force_label: round(self.axial_force / 1000, 2),
+            "Design Mode": self.design_for,
+            "Plate Thickness (mm)": f"{self.plate1.thickness[0]}, {self.plate2.thickness[0]}",
+            "Material": self.main_material,
+            "Ultimate Strength, Fu (MPa)": self.plate1.fu,
+            "Yield Strength, Fy (MPa)": self.plate1.fy,
+            "Width of Plate (mm)": self.width,
+            "Weld Type": self.weld.type,
+            "Fabrication": self.weld.fabrication,
+            "Weld Size (mm)": self.weld_size,
             "Effective Throat Thickness (mm)": getattr(self, 'effective_throat_thickness', None),
-            "Long Joint Reduction Factor β_lw": getattr(self, 'beta_lw', 1.0),
             "End Return Length (mm)": getattr(self, 'end_return_length', None),
             "Overlap Length (mm)": getattr(self, 'overlap_length', None),
-            "Shear Lag Factor": 0.7,
+            "Gamma_mw": self.gamma_mw
         }
-        
+
+        # --- Report Checks Section ---
         self.report_check = []
-        if self.design_status:
-            t1 = ('SubSection', 'Weld Design', '|p{3cm}|p{6.5cm}|p{5cm}|p{1cm}|')
-            self.report_check.append(t1)
-            
-            # Add appropriate design capacity calculation based on design mode
-            if self.design_for == 'Compression':
-                t1 = ('Base Metal Capacity',
-                      f"P_d = A_g × f_y/γ_m0 = {self.A_g:.2f} × {self.plate1.fy}/{self.gamma_m0} = {self.T_db/1000:.2f} kN [Ref: IS 800:2007, Cl.7.1.2]",
-                      f"{self.T_db/1000:.2f} kN",
-                      "Pass" if self.T_db >= self.axial_force else "Fail")
-            else:
-                t1 = ('Base Metal Capacity',
-                      f"min(T_dg, T_dn) = min({self.A_g * self.plate1.fy / self.gamma_m0/1000:.2f}, {0.9 * self.A_g * self.plate1.fu * 0.7 / self.gamma_m1/1000:.2f}) = {self.T_db/1000:.2f} kN [Ref: IS 800:2007, Cl.6.2, 6.3]",
-                      f"{self.T_db/1000:.2f} kN",
-                      "Pass" if self.T_db >= self.axial_force else "Fail")
-            self.report_check.append(t1)
-            
-            t1 = (DISP_WELD_STRENGTH,
-                  f"Required: {self.tensile_force / 1000:.2f} kN",
-                  f"Provided: {self.design_capacity / 1000:.2f} kN",
-                  "Pass" if self.design_capacity >= self.tensile_force else "Fail")
-            self.report_check.append(t1)
-            t1 = ('Overall Utilization Ratio',
-                  "<= 1.0",
-                  f"{self.utilization_ratio:.3f}",
-                  "Pass" if self.utilization_ratio <= 1.0 else "Fail")
-            self.report_check.append(t1)
+        self.report_check.append(('SubSection', f'{self.design_for} Design Summary', '|p{3.2cm}|p{6.8cm}|p{5cm}|p{1cm}|'))
+
+        if self.design_for == 'Compression':
+            self.report_check.append((
+                'Base Metal Capacity (Compression)',
+                f"P_d = A_g × f_y / γ_m0 = {self.A_g:.2f} × {self.plate1.fy}/{self.gamma_m0} = {self.T_db/1000:.2f} kN [IS 800:2007, Cl.7.1.2]",
+                f"{self.T_db/1000:.2f} kN",
+                "Pass" if self.T_db >= self.axial_force else "Fail"
+            ))
         else:
-            t1 = ('SubSection', 'Design Status', '|p{3.5cm}|p{4.5cm}|p{6cm}|p{1.5cm}|')
-            self.report_check.append(t1)
-            t1 = ('Design Status', '', 'Design Fails', 'Fail')
-            self.report_check.append(t1)
+            self.report_check.append((
+                'Base Metal Capacity (Tension)',
+                f"min(T_dg, T_dn) = min({self.A_g * self.plate1.fy / self.gamma_m0 / 1000:.2f}, "
+                f"{0.9 * self.A_g * self.plate1.fu * 0.7 / self.gamma_m1 / 1000:.2f}) = {self.T_db/1000:.2f} kN [IS 800:2007, Cl.6.2–6.3]",
+                f"{self.T_db/1000:.2f} kN",
+                "Pass" if self.T_db >= self.axial_force else "Fail"
+            ))
+
+        # Weld check
+        self.report_check.append((
+            f"Weld Strength ({self.design_for} Mode)",
+            f"Required = {self.axial_force/1000:.2f} kN",
+            f"Provided = {self.design_capacity/1000:.2f} kN",
+            "Pass" if self.design_capacity >= self.axial_force else "Fail"
+        ))
+
+        # Utilization ratio
+        self.report_check.append((
+            'Overall Utilization Ratio',
+            "<= 1.0",
+            f"{self.utilization_ratio:.3f}",
+            "Pass" if self.utilization_ratio <= 1.0 else "Fail"
+        ))
+
+        # --- Generate PDF ---
         fname_no_ext = popup_summary['filename']
-        CreateLatex.save_latex(CreateLatex(), self.report_input, self.report_check, popup_summary,
-                             fname_no_ext, os.path.abspath(".").replace("\\", "/"), [], "/ResourceFiles/images/3d.png", module=self.module)
+        CreateLatex.save_latex(
+            CreateLatex(),
+            self.report_input,
+            self.report_check,
+            popup_summary,
+            fname_no_ext,
+            os.path.abspath(".").replace("\\", "/"),
+            [],
+            "/ResourceFiles/images/3d.png",
+            module=self.module
+        )
+        return True
