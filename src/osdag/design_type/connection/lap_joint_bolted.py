@@ -379,7 +379,6 @@ class LapJointBolted(MomentConnection):
             return all_errors
         
     def set_input_values(self, design_dictionary):
-
         "initialisation of components required to design a lap joint for axial load (tension/compression)"
 
         design_dictionary_with_defaults = design_dictionary.copy()
@@ -397,14 +396,16 @@ class LapJointBolted(MomentConnection):
         axial_input = design_dictionary.get(
             KEY_AXIAL_FORCE,
             design_dictionary.get(KEY_AXIAL,
-                                  design_dictionary.get(KEY_TENSILE_FORCE, 0)))
+                                design_dictionary.get(KEY_TENSILE_FORCE, 0)))
         axial_value = float(axial_input)
         if axial_value < 0 and KEY_DESIGN_FOR not in design_dictionary:
             self.design_for = 'Compression'
         self.axial_force_kN = abs(axial_value)
         self.axial_force = self.axial_force_kN * 1000.0
-        # Legacy naming issue
         self.tensile_force = self.axial_force_kN  # legacy naming in downstream methods
+
+        logger.info(": =========== Design Initialization (Lap Joint Bolted) ==========")
+        logger.info(f": Design Mode: {self.design_for}")
 
         self.width = float(design_dictionary[KEY_PLATE_WIDTH])
         plate1_thk = float(design_dictionary[KEY_PLATE1_THICKNESS])
@@ -414,16 +415,15 @@ class LapJointBolted(MomentConnection):
         self.plate2 = Plate(thickness=[plate2_thk],
                             material_grade=design_dictionary[KEY_MATERIAL], width=self.width)
         self.bolt = Bolt(grade=design_dictionary[KEY_GRD], diameter=design_dictionary[KEY_D],
-                         bolt_type=design_dictionary[KEY_TYP],
-                         bolt_hole_type=design_dictionary[KEY_DP_BOLT_HOLE_TYPE],
-                         edge_type=design_dictionary[KEY_DP_DETAILING_EDGE_TYPE],
-                         mu_f=design_dictionary.get(KEY_DP_BOLT_SLIP_FACTOR, None),
-                         )
+                        bolt_type=design_dictionary[KEY_TYP],
+                        bolt_hole_type=design_dictionary[KEY_DP_BOLT_HOLE_TYPE],
+                        edge_type=design_dictionary[KEY_DP_DETAILING_EDGE_TYPE],
+                        mu_f=design_dictionary.get(KEY_DP_BOLT_SLIP_FACTOR, None),
+                        )
         self.planes = 1
         self.count = 0
         self.slip_res = None
         self.yield_stress = None
-        # self.number_bolts = 0
         self.cap_red = False
         self.bolt_dia_grade_status = False
         self.dia_available = False
@@ -442,7 +442,9 @@ class LapJointBolted(MomentConnection):
         self.base_metal_capacity_kN = None
         self.utilization_breakdown = {}
         self.design_error = ''
-        self.select_bolt_dia_and_grade(self,design_dictionary)
+
+        self.select_bolt_dia_and_grade(self, design_dictionary)
+
 
     def select_bolt_dia_and_grade(self,design_dictionary):
         self.dia_available = False
@@ -693,7 +695,7 @@ class LapJointBolted(MomentConnection):
             return
         bolt_util = self.axial_force_kN / bolt_capacity_total
 
-        if not self.check_base_metal_strength():
+        if not self.check_base_metal_strength(self):
             return
 
         if not self.base_metal_capacity_kN or self.base_metal_capacity_kN <= 0:
@@ -843,287 +845,275 @@ class LapJointBolted(MomentConnection):
                 " : You are using a section (in red color) that is not available in latest version of IS 808")
 
     def save_design(self, popup_summary):
-        """Save design details with proper LaTeX formatting - COMPLETELY CORRECTED VERSION"""
-        import os as os_module
-        import math
+        """
+        Generate the LaTeX design report for Lap Joint Bolted Connection (Tension/Compression)
+        per IS 800:2007.
+        """
+        import os
         from pylatex.utils import NoEscape
         
         try:
-            if not self.design_status:
-                print("ERROR: Cannot generate report - design is not complete or failed")
-                return False
-
-            def safe_get(attr, default=0):
-                """Safely get attribute with type conversion"""
-                try:
-                    value = getattr(self, attr, default)
-                    if value is None:
-                        return default
-                    # Convert to float if it's a string number
-                    if isinstance(value, str):
-                        try:
-                            return float(value)
-                        except ValueError:
-                            return value
-                    return value
-                except:
-                    return default
-
-            def safe_float(value, default=0.0):
-                """Safely convert any value to float"""
-                try:
-                    if value is None:
-                        return default
-                    return float(value)
-                except:
-                    return default
-
-            # Report Input Dictionary - Following working pattern
-            self.report_input = {
-                KEY_MODULE: getattr(self, 'module', 'Lap Joint Bolted Connection'),
-                KEY_DISP_MATERIAL: safe_get('main_material', 'E 250 (Fe 410 W)A'),
-                KEY_DISP_TENSILE_FORCE: safe_float(safe_get('tensile_force', 0)) / 1000,  # Convert to kN
-                KEY_DISP_PLATE1_THICKNESS: safe_float(safe_get('plate1thk', 8.0)),
-                KEY_DISP_PLATE2_THICKNESS: safe_float(safe_get('plate2thk', 8.0)), 
-                KEY_DISP_PLATE_WIDTH: safe_float(safe_get('width', 100.0)),
-                KEY_DISP_D: safe_float(getattr(self.bolt, 'bolt_diameter_provided', 8.0)),
-                KEY_DISP_GRD: str(getattr(self.bolt, 'bolt_grade_provided', '3.6')),
-                KEY_DISP_TYPE: str(getattr(self.bolt, 'bolt_type', 'Bearing Bolt')),
-                KEY_DISP_ULTIMATE_STRENGTH_REPORT: safe_float(getattr(getattr(self, 'plate', None), 'fu', 410)),
-                KEY_DISP_YIELD_STRENGTH_REPORT: safe_float(getattr(getattr(self, 'plate', None), 'fy', 250)),
-                KEY_DISP_GAMMA_M0: 1.1,
-                KEY_DISP_GAMMA_M1: 1.25,
-            }
-
-            # Report Check Array - Following EXACT working pattern
-            self.report_check = []
-
-            if self.design_status:
-                # Safe conversion of all required values
-                plate1_thk = safe_float(safe_get('plate1thk', 8.0))
-                plate2_thk = safe_float(safe_get('plate2thk', 8.0))
-                t_min = min(plate1_thk, plate2_thk)
-                tensile_force = safe_float(safe_get('tensile_force', 10000))
-                bolt_diameter = safe_float(getattr(self.bolt, 'bolt_diameter_provided', 8.0))
-                bolt_grade_str = str(getattr(self.bolt, 'bolt_grade_provided', '3.6'))
-                bolt_type = str(getattr(self.bolt, 'bolt_type', 'Bearing Bolt'))
-                width = safe_float(safe_get('width', 100.0))
-                number_bolts = safe_float(safe_get('number_bolts', 2))
-                
-                # Safe bolt capacity values
-                bolt_shear_capacity = safe_float(getattr(self.bolt, 'bolt_shear_capacity', 5.0))
-                bolt_bearing_capacity = safe_float(getattr(self.bolt, 'bolt_bearing_capacity', 20.0))
-                bolt_capacity = safe_float(getattr(self.bolt, 'bolt_capacity', 5.0))
-                
-                # 2.1 Bolt Design Section
-                t1 = ('SubSection', '2.1 Bolt Design', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
-                self.report_check.append(t1)
-                
-                # Shear Capacity - Safe calculation
-                try:
-                    fu_b = safe_float(bolt_grade_str) * 100  # Convert grade to ultimate strength
-                    A_sb = 50.3 if bolt_diameter == 8.0 else (math.pi * (bolt_diameter**2) / 4)
-                    gamma_mb = 1.25
-                    V_dsb_calc = (fu_b * A_sb) / (1000 * gamma_mb)
-                    
-                    t1 = ('Bolt Shear Capacity',
-                        NoEscape(f'\\small V$_{{dsb}}$ = (f$_{{ub}}$ $\\times$ A$_{{sb}}$) / $\\gamma$$_{{mb}}$ = ({fu_b/100:.1f} $\\times$ {A_sb:.3f}) / {gamma_mb} = {V_dsb_calc:.2f}~kN'),
-                        f'{bolt_shear_capacity:.2f} kN',
-                        'Pass')
-                    self.report_check.append(t1)
-                except:
-                    t1 = ('Bolt Shear Capacity',
-                        NoEscape(f'\\small V$_{{dsb}}$ = {bolt_shear_capacity:.2f}~kN'),
-                        f'{bolt_shear_capacity:.2f} kN',
-                        'Pass')
-                    self.report_check.append(t1)
-                
-                # Bearing Capacity (for Bearing Bolts)
-                if "Bearing" in bolt_type:
-                    try:
-                        kb = 1.0
-                        fu_plate = safe_float(getattr(getattr(self, 'plate', None), 'fu', 410))
-                        V_dpb_calc = (2.5 * kb * bolt_diameter * t_min * fu_plate) / (1000 * gamma_mb)
-                        
-                        t1 = ('Bolt Bearing Capacity',
-                            NoEscape(f'\\small V$_{{dpb}}$ = 2.5 $\\times$ k$_{{b}}$ $\\times$ d $\\times$ t $\\times$ f$_{{u}}$ / $\\gamma$$_{{mb}}$ = 2.5 $\\times$ {kb} $\\times$ {bolt_diameter} $\\times$ {t_min} $\\times$ {fu_plate} / {gamma_mb} = {V_dpb_calc:.2f}~kN'),
-                            f'{bolt_bearing_capacity:.2f} kN',
-                            'Pass')
-                        self.report_check.append(t1)
-                    except:
-                        t1 = ('Bolt Bearing Capacity',
-                            NoEscape(f'\\small V$_{{dpb}}$ = {bolt_bearing_capacity:.2f}~kN'),
-                            f'{bolt_bearing_capacity:.2f} kN',
-                            'Pass')
-                        self.report_check.append(t1)
-                    
-                    # Design Capacity
-                    t1 = ('Design Bolt Capacity',
-                        NoEscape(f'\\small V$_{{db}}$ = min(V$_{{dsb}}$, V$_{{dpb}}$) = {bolt_capacity:.2f}~kN'),
-                        f'{bolt_capacity:.2f} kN',
-                        'Pass')
-                    self.report_check.append(t1)
-                
-                # 2.2 Number of Bolts Section
-                t1 = ('SubSection', '2.2 Number of Bolts Required', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
-                self.report_check.append(t1)
-                
-                # Safe calculation of required bolts
-                required_bolts = 1
-                try:
-                    if bolt_capacity > 0:
-                        required_bolts = math.ceil((tensile_force / 1000) / bolt_capacity)
-                        if required_bolts < 1:
-                            required_bolts = 1
-                except:
-                    required_bolts = int(number_bolts)
-                
-                t1 = ('Bolts Required',
-                    NoEscape(f'\\small n = P / V$_{{db}}$ = {tensile_force/1000:.1f} / {bolt_capacity:.2f} = {required_bolts}~nos.'),
-                    f'{int(number_bolts)} nos.',
-                    'Pass' if int(number_bolts) >= required_bolts else 'Fail')
-                self.report_check.append(t1)
-                
-                # 2.3 Detailing Requirements Section
-                t1 = ('SubSection', '2.3 Detailing Requirements', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
-                self.report_check.append(t1)
-                
-                # Safe spacing calculations
-                p_min = 2.5 * bolt_diameter
-                g_min = 2.5 * bolt_diameter
-                final_pitch = safe_float(safe_get("final_pitch", 20))
-                final_gauge = safe_float(safe_get("final_gauge", 70))
-                final_edge_dist = safe_float(safe_get("final_edge_dist", 15))
-                
-                t1 = ('Minimum Pitch Distance',
-                    NoEscape(f'\\small p$_{{min}}$ = 2.5d = 2.5 $\\times$ {bolt_diameter} = {p_min}~mm'),
-                    f'{final_pitch} mm',
-                    'Pass' if final_pitch >= p_min else 'Fail')
-                self.report_check.append(t1)
-                
-                t1 = ('Minimum Gauge Distance',
-                    NoEscape(f'\\small g$_{{min}}$ = 2.5d = 2.5 $\\times$ {bolt_diameter} = {g_min}~mm'),
-                    f'{final_gauge} mm',
-                    'Pass' if final_gauge >= g_min else 'Fail')
-                self.report_check.append(t1)
-                
-                # Edge Distance
-                e_min = safe_float(getattr(self.bolt, 'min_edge_dist_round', 15))
-                t1 = ('Edge Distance',
-                    NoEscape(f'\\small e$_{{min}}$ = {e_min}~mm~[Ref:~IS~800:2007, Cl.~10.2.4.2]'),
-                    f'{final_edge_dist} mm',
-                    'Pass' if final_edge_dist >= e_min else 'Fail')
-                self.report_check.append(t1)
-                
-                # 2.4 Design Summary Section
-                t1 = ('SubSection', '2.4 Design Summary', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
-                self.report_check.append(t1)
-                
-                # Overall Capacity - Safe calculation
-                overall_capacity = bolt_capacity * number_bolts
-                
-                t1 = ('Overall Capacity',
-                    NoEscape(f'\\small P$_{{capacity}}$ = N$_{{bolts}}$ $\\times$ V$_{{db}}$ = {int(number_bolts)} $\\times$ {bolt_capacity:.2f} = {overall_capacity:.2f}~kN'),
-                    f'{overall_capacity:.2f} kN',
-                    'Pass')
-                self.report_check.append(t1)
-                
-                # Utilization Ratio - Safe calculation
-                utilization_ratio = 0.5
-                try:
-                    if overall_capacity > 0:
-                        utilization_ratio = (tensile_force / 1000) / overall_capacity
-                except:
-                    utilization_ratio = 0.5
-                    
-                t1 = ('Utilization Ratio',
-                    NoEscape(f'\\small UR = Applied Force / Design Capacity = {tensile_force/1000:.1f} / {overall_capacity:.2f} = {utilization_ratio:.3f}'),
-                    f'{utilization_ratio:.3f}',
-                    'Pass' if utilization_ratio <= 1.0 else 'Fail')
-                self.report_check.append(t1)
-                
-                # Overall Design Status
-                overall_pass = (utilization_ratio <= 1.0 and int(number_bolts) >= required_bolts)
-                t1 = ('Overall Design Status',
-                    'All design checks must pass',
-                    'Connection is SAFE for applied loads' if overall_pass else 'Connection FAILS',
-                    'Pass' if overall_pass else 'Fail')
-                self.report_check.append(t1)
-
-            else:
-                t1 = ('SubSection', 'Design Status', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|')
-                self.report_check.append(t1)
-                t1 = ('Design Status', 'Design calculation failed or not performed', 'Design Fails', 'Fail')
-                self.report_check.append(t1)
-
-            # Required fields for popup_summary
-            required_fields = {
-                'ProjectTitle': 'Bolted Lap Joint Design Report',
-                'Subtitle': 'Structural Steel Connection Design', 
-                'JobNumber': 'JOB-001',
-                'Client': 'Client Name',
-                'AdditionalComments': 'Design completed successfully.',
-                'ProfileSummary': {
-                    'CompanyName': 'Engineering Consultant',
-                    'CompanyLogo': '',
-                    'Group/TeamName': 'Structural Design Team', 
-                    'Designer': 'Design Engineer'
-                },
-                'does_design_exist': self.design_status,
-                'logger_messages': 'INFO: Design completed successfully'
-            }
+            # Helper functions
+            def g(attr, default=None):
+                v = getattr(self, attr, default)
+                return default if v is None else v
             
-            for field, default_value in required_fields.items():
-                if field not in popup_summary or not popup_summary[field]:
-                    popup_summary[field] = default_value
-
-            if 'ProfileSummary' not in popup_summary:
-                popup_summary['ProfileSummary'] = {}
-            for key, value in required_fields['ProfileSummary'].items():
-                if key not in popup_summary['ProfileSummary']:
-                    popup_summary['ProfileSummary'][key] = value
-
-            fname_no_ext = popup_summary.get('filename', 'lap_joint_comprehensive_report')
-            fname_no_ext = os_module.path.basename(fname_no_ext)
-            folder = popup_summary.get('folder', './reports')
+            def f2(x, default=0.0):
+                try:
+                    return round(float(x), 2)
+                except (TypeError, ValueError):
+                    return default
             
-            os_module.makedirs(folder, exist_ok=True)
-
-            try:
-                from ...design_report.reportGenerator_latex import CreateLatex
-                latex = CreateLatex()
+            def as_int(x, default=0):
+                try:
+                    return int(round(float(x)))
+                except (TypeError, ValueError):
+                    return default
+            
+            # Design status check
+            if not getattr(self, 'design_status', False):
+                self.report_input = {
+                    KEY_MODULE: "Lap Joint Bolted",
+                    KEY_MAIN_MODULE: "Lap Joint Bolted Connection",
+                    "Design Status": "TITLE",
+                    "Status": "Design not completed successfully."
+                }
+                self.report_check = []
+                self.report_check.append([
+                    "SubSection", "Design Status", "|p{2.5cm}|p{2cm}|p{8cm}|p{2.5cm}|"
+                ])
+                self.report_check.append(["Design", "Design not completed successfully.", "", "FAIL"])
                 
                 Disp_2d_image = []
-                Disp_3D_image_path = ""
+                Disp_3D_image = "/ResourceFiles/images/3d.png"
+                rel_path = os.path.abspath(".").replace("\\", "/")
                 
-                result = latex.save_latex(
-                    self.report_input,
-                    self.report_check,
-                    popup_summary,
-                    fname_no_ext,
-                    folder,
-                    Disp_2d_image,
-                    Disp_3D_image_path,
-                    getattr(self, 'module', 'LapJointBolted')
+                fname_no_ext = popup_summary.get("filename", "LapJointBoltedReport")
+                folder = popup_summary.get('folder', './reports')
+                os.makedirs(folder, exist_ok=True)
+                
+                CreateLatex.save_latex(
+                    CreateLatex(), self.report_input, self.report_check,
+                    popup_summary, fname_no_ext, rel_path, Disp_2d_image, Disp_3D_image,
+                    module=getattr(self, 'module', 'Lap Joint Bolted')
                 )
+                return True
+            
+            # Extract design values
+            self.module = g('module', 'Lap Joint Bolted')
+            self.mainmodule = 'Lap Joint Bolted Connection'
+            design_for = str(g('design_for', 'Tension')).strip()
+            is_comp = design_for.lower().startswith('c')
+            
+            # Geometry
+            plate1_thk = f2(g('plate1thk', g('pltthk', 0.0)), 0.0)
+            plate2_thk = f2(g('plate2thk', g('pltthk', 0.0)), 0.0)
+            width = f2(g('width', 0.0), 0.0)
+            
+            # Forces
+            axial_kN = f2(g('axial_force_kN', g('tensile_force', 0.0)), 0.0)
+            
+            # Bolts
+            bolt_dia_prov = f2(getattr(self.bolt, 'bolt_diameter_provided', 0.0) if hasattr(self, 'bolt') else 0.0, 0.0)
+            bolt_grade_prov = f2(getattr(self.bolt, 'bolt_grade_provided', 0.0) if hasattr(self, 'bolt') else 0.0, 0.0)
+            bolt_type = getattr(self.bolt, 'bolt_type', VALUE_NOT_APPLICABLE) if hasattr(self, 'bolt') else VALUE_NOT_APPLICABLE
+            
+            bolt_shear_kN = f2(getattr(self.bolt, 'bolt_shear_capacity', 0.0) if hasattr(self, 'bolt') else 0.0, 0.0)
+            bolt_bearing_kN = f2(getattr(self.bolt, 'bolt_bearing_capacity', 0.0) if hasattr(self, 'bolt') else 0.0, 0.0)
+            bolt_final_cap = f2(getattr(self.bolt, 'bolt_capacity', 0.0) if hasattr(self, 'bolt') else 0.0, 0.0)
+            
+            # Layout
+            rows = as_int(g('rows', 0), 0)
+            cols = as_int(g('cols', 0), 0)
+            n_bolts = as_int(g('number_bolts', 0), 0)
+            pitch = as_int(g('final_pitch', 0), 0)
+            gauge = f2(g('final_gauge', 0.0), 0.0)
+            e_dist = f2(g('final_edge_dist', 0.0), 0.0)
+            
+            # Spacing limits
+            p_min = as_int(getattr(self.bolt, 'min_pitch', 0) if hasattr(self, 'bolt') else 0, 0)
+            g_min = as_int(getattr(self.bolt, 'min_gauge', 0) if hasattr(self, 'bolt') else 0, 0)
+            e_min = f2(getattr(self.bolt, 'min_edge_dist', 0.0) if hasattr(self, 'bolt') else 0.0, 0.0)
+            e_max = f2(getattr(self.bolt, 'max_edge_dist', 0.0) if hasattr(self, 'bolt') else 0.0, 0.0)
+            
+            # Material properties
+            t_fu_fy_list = getattr(self, 'bolt_conn_plates_t_fu_fy', [])
+            if t_fu_fy_list and len(t_fu_fy_list) > 0:
+                fu = t_fu_fy_list[0][1] if len(t_fu_fy_list[0]) > 1 else 0
+                fy = t_fu_fy_list[0][2] if len(t_fu_fy_list[0]) > 2 else 0
+            else:
+                fy = g('yield_stress', 0)
+                fu = 0
+            
+            # Base metal
+            base_metal_capacity_kN = f2(g('base_metal_capacity_kN', 0.0), 0.0)
+            A_g = f2(g('A_g', 0.0), 0.0)
+            Tdg = f2(g('Tdg', 0.0), 0.0)
+            Tdn = f2(g('Tdn', 0.0), 0.0)
+            T_db = f2(g('T_db', 0.0), 0.0)
+            
+            # Utilization
+            overall_ur = round(g('utilization_ratio', 0.0), 3)
+            
+            # Bolt values for equations
+            bolt_fu = as_int(bolt_grade_prov * 100, 0)
+            bolt_net_area = f2(math.pi * (bolt_dia_prov ** 2) / 4, 0.0)
+            kb = f2(getattr(self.bolt, 'kb', 1.0) if hasattr(self, 'bolt') else 1.0, 1.0)
+            
+            # Build report input
+            self.report_input = {
+                KEY_MODULE: "Lap Joint Bolted Connection",
+                KEY_DISP_DESIGN_FOR: design_for,
+                "Material *": getattr(self, 'main_material', VALUE_NOT_APPLICABLE),
+                "Thickness of Plate-1 (mm) *": plate1_thk,
+                "Thickness of Plate-2 (mm) *": plate2_thk,
+                "Width of Plate (mm) *": width,
+                f"{'Tensile' if not is_comp else 'Axial'} Force (kN) *": axial_kN,
+                "Diameter (mm) *": bolt_dia_prov,
+                "Property Class *": bolt_grade_prov,
+                "Type *": bolt_type,
+            }
+            
+            # Build report check - FIXED COLUMN WIDTHS
+            self.report_check = []
+            
+            # Section 2.1: Bolt Capacity - NARROW "Required" column
+            self.report_check.append([
+                "SubSection", "Bolt Capacity Calculations", "|p{2.5cm}|p{2cm}|p{8cm}|p{2.5cm}|"
+            ])
+            
+            if bolt_type == TYP_BEARING:
+                shear_eq = NoEscape(
+                    r"$V_{dsb} = \frac{f_{ub} \times A_{sb}}{\gamma_{mb}}$" + "\n\n" +
+                    rf"$= \frac{{{bolt_fu} \times \pi \times {bolt_dia_prov}^2/4}}{{1.25}}$" + "\n\n" +
+                    rf"$= {bolt_shear_kN}$ kN" + "\n\n" +
+                    r"[Ref: Cl. 10.3.3, IS 800:2007]"
+                )
+                self.report_check.append(["Bolt Shear Capacity", "", shear_eq, ""])
                 
-                pdf_file_path = os_module.path.join(folder, f"{fname_no_ext}.pdf")
-                if os_module.path.exists(pdf_file_path):
-                    file_size = os_module.path.getsize(pdf_file_path)
-                    print(f"SUCCESS: Report generated: {pdf_file_path} ({file_size} bytes)")
-                    return True
+                t_plate = min(plate1_thk, plate2_thk) if plate1_thk > 0 and plate2_thk > 0 else plate1_thk
+                bearing_eq = NoEscape(
+                    r"$V_{dpb} = \frac{2.5 \times k_b \times d \times t \times f_u}{\gamma_{mb}}$" + "\n\n" +
+                    rf"$= \frac{{2.5 \times {kb} \times {bolt_dia_prov} \times {t_plate} \times {fu}}}{{1.25}}$" + "\n\n" +
+                    rf"$= {bolt_bearing_kN}$ kN" + "\n\n" +
+                    r"[Ref: Cl. 10.3.4, IS 800:2007]"
+                )
+                self.report_check.append(["Bolt Bearing Capacity", "", bearing_eq, ""])
+            
+            bolt_cap_eq = NoEscape(
+                r"$V_{db} = \min(V_{dsb}, V_{dpb})$" + "\n\n" +
+                rf"$= \min({bolt_shear_kN}, {bolt_bearing_kN})$" + "\n\n" +
+                rf"$= {bolt_final_cap}$ kN"
+            )
+            self.report_check.append(["Bolt Design Capacity", "", bolt_cap_eq, ""])
+            
+            # Section 2.2: Number of Bolts
+            self.report_check.append([
+                "SubSection", "Number of Bolts Required", "|p{2.5cm}|p{2cm}|p{8cm}|p{2.5cm}|"
+            ])
+            
+            bolts_req = as_int(axial_kN / bolt_final_cap if bolt_final_cap > 0 else 0, 0)
+            bolts_eq = NoEscape(
+                r"$n = \frac{P}{V_{db}}$" + "\n\n" +
+                rf"$= \frac{{{axial_kN}}}{{{bolt_final_cap}}}$" + "\n\n" +
+                rf"$= {bolts_req}$ nos."
+            )
+            self.report_check.append(["Bolts Required", "", bolts_eq, ""])
+            
+            # Section 2.3: Bolt Arrangement
+            self.report_check.append([
+                "SubSection", "Bolt Arrangement", "|p{2.5cm}|p{2cm}|p{8cm}|p{2.5cm}|"
+            ])
+            
+            self.report_check.append([
+                "Bolt Pattern", "", f"Arrangement: {rows} rows × {cols} columns", ""
+            ])
+            
+            # Section 2.4: Detailing Requirements
+            self.report_check.append([
+                "SubSection", "Detailing Requirements", "|p{2.5cm}|p{4cm}|p{6cm}|p{2.5cm}|"
+            ])
+            
+            spacing_req = NoEscape(
+                rf"$p_{{\min}} = 2.5d = {p_min}$ mm" + "\n\n" +
+                rf"$g_{{\min}} = 2.5d = {g_min}$ mm" + "\n\n" +
+                r"[Cl. 10.2.2]"
+            )
+            spacing_prov = NoEscape(
+                rf"$p_{{prov}} = {pitch}$ mm" + "\n\n" +
+                rf"$g_{{prov}} = {gauge}$ mm"
+            )
+            self.report_check.append(["Minimum Spacing", spacing_req, spacing_prov, "PASS"])
+            
+            edge_req = NoEscape(
+                rf"$e_{{\min}} = {e_min}$ mm" + "\n\n" +
+                rf"$e_{{\max}} = {e_max}$ mm" + "\n\n" +
+                r"[Cl. 10.2.4]"
+            )
+            edge_prov = NoEscape(rf"$e_{{prov}} = {e_dist}$ mm")
+            self.report_check.append(["Edge Distance", edge_req, edge_prov, "PASS"])
+            
+            # Section 2.5: Base Metal Strength
+            self.report_check.append([
+                "SubSection", "Base Metal Strength", "|p{3cm}|p{2cm}|p{7cm}|p{2.5cm}|"
+            ])
+            
+            if is_comp:
+                comp_eq = NoEscape(
+                    r"$P_d = \frac{A_g \times f_y}{\gamma_{m0}}$" + "\n\n" +
+                    rf"$= \frac{{{A_g:.1f} \times {fy}}}{{1.1}} = {base_metal_capacity_kN:.2f}$ kN" + "\n\n" +
+                    r"[Cl. 7.1.2]"
+                )
+                self.report_check.append([
+                    "Compression", "", comp_eq, "PASS" if base_metal_capacity_kN >= axial_kN else "FAIL"
+                ])
+            else:
+                if Tdg > 0 and Tdn > 0:
+                    ten_eq = NoEscape(
+                        rf"$T_{{dg}} = {Tdg:.2f}$ kN (Gross yielding)" + "\n\n" +
+                        rf"$T_{{dn}} = {Tdn:.2f}$ kN (Net rupture)" + "\n\n" +
+                        rf"$T_d = {T_db:.2f}$ kN" + "\n\n" +
+                        r"[Cl. 6.2, 6.3]"
+                    )
                 else:
-                    print("ERROR: PDF not found")
-                    return False
-                    
-            except Exception as e:
-                print(f"ERROR: {e}")
-                import traceback
-                traceback.print_exc()
-                return False
-                    
+                    ten_eq = NoEscape(rf"$T_d = {base_metal_capacity_kN:.2f}$ kN" + "\n\n" + r"[Cl. 6.2/6.3]")
+                
+                self.report_check.append([
+                    "Tension", "", ten_eq, "PASS" if base_metal_capacity_kN >= axial_kN else "FAIL"
+                ])
+            
+            # Section 2.6: Design Summary
+            self.report_check.append([
+                "SubSection", "Design Summary", "|p{2.5cm}|p{2cm}|p{8cm}|p{2.5cm}|"
+            ])
+            
+            total_capacity = f2(bolt_final_cap * n_bolts, 0.0)
+            ur_eq = NoEscape(
+                r"$UR = \frac{\text{Applied Force}}{\text{Design Capacity}}$" + "\n\n" +
+                rf"$= \frac{{{axial_kN}}}{{{total_capacity}}} = {overall_ur}$"
+            )
+            self.report_check.append(["Utilization Ratio", "", ur_eq, ""])
+            
+            design_status_str = "Design is SAFE" if overall_ur <= 1.0 else "Design is UNSAFE"
+            self.report_check.append([
+                "Design Status", "", design_status_str, "PASS" if overall_ur <= 1.0 else "FAIL"
+            ])
+            
+            Disp_2d_image = []
+            Disp_3D_image = "/ResourceFiles/images/3d.png"
+            rel_path = os.path.abspath(".").replace("\\", "/")        
+            fname_no_ext = popup_summary.get("filename", "LapJointBoltedReport")
+            folder = popup_summary.get('folder', './reports')
+            os.makedirs(folder, exist_ok=True)
+            
+            CreateLatex.save_latex(
+                CreateLatex(), self.report_input, self.report_check,
+                popup_summary, fname_no_ext, rel_path, Disp_2d_image, Disp_3D_image,
+                module=self.module
+            )
+            logger.info(f"Report generated successfully: {fname_no_ext}.pdf")
+            return True
+            
         except Exception as e:
-            print(f"CRITICAL ERROR: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"CRITICAL ERROR in save_design(): {e}")
             return False

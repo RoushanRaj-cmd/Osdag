@@ -1077,7 +1077,6 @@ class ButtJointBolted(MomentConnection):
     def save_design(self, popup_summary):
         """
         Generate the LaTeX design report for Bolted Butt Joint (Tension or Compression) per IS 800:2007.
-        Mirrors the welded module’s structure for base-metal reporting and the bolted spacing/bolt checks.
         """
         try:
             # ---------- INPUTS BLOCK ----------
@@ -1205,7 +1204,6 @@ class ButtJointBolted(MomentConnection):
                             cl_10_3_3_2_large_grip_reduction_factor(lg, bolt_d, blg),
                             get_pass_fail(blg, 0.0, relation='gt')))
 
-                # --- Section: Base Metal Strength (mirrors welded report’s clarity) ---
                 self.report_check.append(('SubSection', 'Base Metal Strength', '|p{4cm}|p{6cm}|p{4cm}|p{2cm}|'))
 
                 # Make sure capacities from base-metal calc are available
@@ -1262,7 +1260,6 @@ class ButtJointBolted(MomentConnection):
                 ))
 
             else:
-                # Design not completed – keep the same failure block style you already use
                 self.report_check.append(('SubSection', 'Design Status', '|p{2.5cm}|p{7.5cm}|p{3cm}|p{2.5cm}|'))
                 self.report_check.append((
                     'Design Status',
@@ -1276,7 +1273,6 @@ class ButtJointBolted(MomentConnection):
             Disp_3D_image = "/ResourceFiles/images/3d.png"
             import sys, os
             rel_path = os.path.abspath(".").replace("\\", "/")
-            #fname_no_ext = popup_summary['filename']
             fname_no_ext = popup_summary.get('filename', 'Butt_Joint_Welded_Report')
             folder = popup_summary.get('folder', './reports')
             os.makedirs(folder, exist_ok=True)
@@ -1287,6 +1283,7 @@ class ButtJointBolted(MomentConnection):
             CreateLatex.save_latex(CreateLatex(), self.report_input, self.report_check,
                                 popup_summary, fname_no_ext, rel_path, Disp_2d_image,
                                 Disp_3D_image, module=self.module)
+            logger.info(f"Report generated successfully: {fname_no_ext}.pdf")
 
         except Exception as e:
             print(f"CRITICAL ERROR in save_design(): {e}")
