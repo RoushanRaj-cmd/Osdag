@@ -684,16 +684,14 @@ class SeatedAngleConnection(ShearConnection):
     def member_capacity(self):
         super(SeatedAngleConnection, self).member_capacity(self)
 
-        if self.supported_section.shear_yielding_capacity / 1000 > self.load.shear_force and \
-                self.supporting_section.tension_yielding_capacity / 1000 > self.load.shear_force:
+        vy_min_n = min(0.15 * self.supported_section.shear_yielding_capacity, 40000.0)  # in N
+        vy_min_kn = vy_min_n / 1000  # Convert to kN
 
-            if self.load.shear_force <= min(round(0.15 * self.supported_section.shear_yielding_capacity / 1000, 0),
-                                            40.0):
-                logger.warning(" : The value of factored shear force is less than the minimum recommended value. "
-                               "Setting shear force value to 15% of supported beam shear capacity or 40 kN, whichever is lesser"
-                               "[Ref. IS 800:2007, Cl.10.7].")
-                self.load.shear_force = min(round(0.15 * self.supported_section.shear_yielding_capacity / 1000, 0),
-                                            40.0)
+        if self.load.shear_force < vy_min_kn:
+            logger.warning("The value of factored shear force is less than the minimum recommended value. "
+                        "Setting shear force value to 15% of supported beam shear capacity or 40 kN, whichever is lesser"
+                        "[Ref. IS 800:2007, Cl.10.7].")
+            self.load.shear_force = vy_min_kn
 
             print("Preliminary member check(s) have passed. Checking available bolt diameter(s).")
             self.select_angle_thickness(self)
@@ -868,7 +866,7 @@ class SeatedAngleConnection(ShearConnection):
                     # bolt_force_previous = self.bolt.bolt_force
                     count += 1
                 else:
-                    self.bolt.bolt_force = self.load.shear_force / self.bolt.number
+                    self.bolt.bolt_force = self.load.shear_force / self.bolt.bolts_required
                     continue
             if self.bolt_dia_possible:
                 self.bolt.bolt_diameter_provided = min(self.bolt_dia_possible)
@@ -1277,13 +1275,13 @@ class SeatedAngleConnection(ShearConnection):
                 self.bolt.top_angle_gauge_column = round_up((self.top_angle.width -
                             self.supporting_section.root_radius * 2 - self.supporting_section.web_thickness) / 2 +
                             self.supporting_section.root_radius * 2 + self.supporting_section.web_thickness, 1)
-                self.bolt.top_angle_edge_column = round((self.top_angle.width - self.bolt.top_angle_gauge_column) / 2, 1)
+                self.bolt.top_angle_edge_column = round_up((self.top_angle.width - self.bolt.top_angle_gauge_column) / 2, 1)
                 # self.top_angle.width = self.bolt.top_angle_gauge_column + 2 * self.bolt.top_angle_edge_column
             else:
                 self.bolt.top_angle_gauge_column = round_up((self.supporting_section.flange_width -
                             self.supporting_section.root_radius * 2 - self.supporting_section.web_thickness) / 2 +
                             self.supporting_section.root_radius * 2 + self.supporting_section.web_thickness, 1)
-                self.bolt.top_angle_edge_column = round((self.top_angle.width - self.bolt.top_angle_gauge_column) / 2, 1)
+                self.bolt.top_angle_edge_column = round_up((self.top_angle.width - self.bolt.top_angle_gauge_column) / 2, 1)
                 # self.top_angle.width = self.bolt.top_angle_gauge_column + 2 * self.bolt.top_angle_edge_column
 
             if self.top_angle.width < self.supported_section.flange_width:
@@ -1291,13 +1289,13 @@ class SeatedAngleConnection(ShearConnection):
                 self.bolt.top_angle_gauge_beam = round_up((self.top_angle.width -
                             self.supported_section.root_radius * 2 - self.supported_section.web_thickness) / 2 +
                             self.supported_section.root_radius * 2 + self.supported_section.web_thickness, 1)
-                self.bolt.top_angle_edge_beam = round((self.top_angle.width - self.bolt.top_angle_gauge_beam) / 2, 1)
+                self.bolt.top_angle_edge_beam = round_up((self.top_angle.width - self.bolt.top_angle_gauge_beam) / 2, 1)
 
             else:
                 self.bolt.top_angle_gauge_beam = round_up((self.supported_section.flange_width -
                             self.supported_section.root_radius * 2 - self.supported_section.web_thickness) / 2 +
                             self.supported_section.root_radius * 2 + self.supported_section.web_thickness, 1)
-                self.bolt.top_angle_edge_beam = round((self.top_angle.width - self.bolt.top_angle_gauge_beam) / 2, 1)
+                self.bolt.top_angle_edge_beam = round_up((self.top_angle.width - self.bolt.top_angle_gauge_beam) / 2, 1)
 
         else:
             self.top_angle.width = max(round_up(self.supported_section.flange_width + 20, 1),
@@ -1308,9 +1306,9 @@ class SeatedAngleConnection(ShearConnection):
             self.bolt.top_angle_gauge_beam = round_up((self.supported_section.flange_width -
                             self.supported_section.root_radius * 2 - self.supported_section.web_thickness) / 2 +
                             self.supported_section.root_radius * 2 + self.supported_section.web_thickness, 1)
-            self.bolt.top_angle_edge_beam = round((self.top_angle.width - self.bolt.top_angle_gauge_beam) / 2, 1)
+            self.bolt.top_angle_edge_beam = round_up((self.top_angle.width - self.bolt.top_angle_gauge_beam) / 2, 1)
             self.bolt.top_angle_gauge_column = self.bolt.top_angle_gauge_beam
-            self.bolt.top_angle_edge_column = round((self.top_angle.width - self.bolt.top_angle_gauge_column) / 2, 1)
+            self.bolt.top_angle_edge_column = round_up((self.top_angle.width - self.bolt.top_angle_gauge_column) / 2, 1)
 
         self.bolt.top_angle_end = round_up(min((self.top_angle.leg_a_length - self.top_angle.thickness - self.top_angle.root_radius) / 2,
                                            self.top_angle.leg_a_length- self.plate.gap- self.bolt.min_edge_dist_round), 1)
@@ -1339,11 +1337,11 @@ class SeatedAngleConnection(ShearConnection):
             self.bolt.seated_angle_gauge_beam = round_up((self.supported_section.flange_width -
                                     self.supported_section.root_radius * 2 - self.supported_section.web_thickness)/2 +
                                     self.supported_section.root_radius * 2 + self.supported_section.web_thickness, 1)
-            self.bolt.seated_angle_edge_beam = round((self.seated_angle.width - self.bolt.seated_angle_gauge_beam) / 2, 1)
+            self.bolt.seated_angle_edge_beam = round_up((self.seated_angle.width - self.bolt.seated_angle_gauge_beam) / 2, 1)
             self.bolt.seated_angle_end_column = round_up((self.seated.leg_a_length - self.seated.thickness -
                                                           self.seated.root_radius - self.bolt.min_end_dist_round -
                                                           self.bolt.min_pitch_round * (self.bolt.bolt_row - 1)), 1)
-            self.bolt.seated_angle_edge_column = round((self.seated_angle.width - self.bolt.seated_angle_gauge_column -
+            self.bolt.seated_angle_edge_column = round_up((self.seated_angle.width - self.bolt.seated_angle_gauge_column -
                                                           (self.bolt.bolt_col - 2) * self.bolt.min_gauge_round) / 2, 1)
 
         else:
@@ -1353,13 +1351,13 @@ class SeatedAngleConnection(ShearConnection):
             self.bolt.seated_angle_gauge_beam = round_up((self.supported_section.flange_width -
                                     self.supported_section.root_radius * 2 + self.supported_section.web_thickness)/2 +
                                     self.supported_section.root_radius * 2 + self.supported_section.web_thickness, 1)
-            self.bolt.seated_angle_edge_beam = round((self.seated_angle.width - self.bolt.seated_angle_gauge_beam) / 2, 1)
+            self.bolt.seated_angle_edge_beam = round_up((self.seated_angle.width - self.bolt.seated_angle_gauge_beam) / 2, 1)
             self.bolt.seated_angle_gauge_column = round_up((self.seated_angle.width - self.bolt.min_edge_dist_round * 2)/
                                                             (self.bolt.bolt_col - 1), 1)
             self.bolt.seated_angle_end_column = round_up((self.seated.leg_a_length - self.seated.thickness -
                                                           self.seated.root_radius - self.bolt.min_end_dist_round -
                                                           self.bolt.min_pitch_round * (self.bolt.bolt_row - 1)), 1)
-            self.bolt.seated_angle_edge_column = max(self.bolt.min_edge_dist_round,round((self.seated_angle.width - (self.bolt.bolt_col - 1) *
+            self.bolt.seated_angle_edge_column = max(self.bolt.min_edge_dist_round,round_up((self.seated_angle.width - (self.bolt.bolt_col - 1) *
                                                            self.bolt.seated_angle_gauge_column) / 2, 1))
 
         # self.bolt.seated_angle_end_beam = round_up((self.seated.leg_a_length - self.seated.thickness - self.seated.root_radius) / 2, 1)
@@ -1486,7 +1484,7 @@ class SeatedAngleConnection(ShearConnection):
         t1 = ('SubSection', 'Section Design', '|p{4cm}|p{5cm}|p{5.5cm}|p{1.5cm}|')
         self.report_check.append(t1)
 
-        h = self.supported_section.web_height
+        h = self.supported_section.depth - 2 * (self.supported_section.flange_thickness + self.supported_section.root_radius)
         t = self.supported_section.web_thickness
 
         initial_shear_capacity = round(self.supported_section.shear_yielding_capacity/0.6/1000,2)
@@ -1502,8 +1500,10 @@ class SeatedAngleConnection(ShearConnection):
             t1 = ('SubSection', 'Load Consideration', '|p{4cm}|p{5cm}|p{5.5cm}|p{1.5cm}|')
             self.report_check.append(t1)
 
-            min_shear_load = min(40,round(0.15*self.supported_section.shear_yielding_capacity / 0.6,2))
+            min_shear_load = min(40,round(0.15*self.supported_section.shear_yielding_capacity / 1000,2))
             applied_shear_force = max(self.load.shear_force,min_shear_load)
+            self.load.shear_force = applied_shear_force
+            self.bolt.bolt_force = self.load.shear_force / self.bolt.bolts_required
 
             t1 = (KEY_DISP_APPLIED_SHEAR_LOAD, self.load.shear_force,
                   prov_shear_load(shear_input=self.load.shear_force, min_sc=min_shear_load,
@@ -1591,8 +1591,7 @@ class SeatedAngleConnection(ShearConnection):
             if self.bolt.design_status is True:
                 t6 = (DISP_NUM_OF_COLUMNS, '', self.bolt.bolt_col, '')
                 self.report_check.append(t6)
-                t7 = (DISP_NUM_OF_ROWS, row_col_limit(1,2,"rows"), self.bolt.bolt_row,
-                      get_pass_fail(2, self.bolt.bolt_row, relation='geq'))
+                t7 = (DISP_NUM_OF_ROWS, row_col_limit(1,2,"rows"), self.bolt.bolt_row,'')
                 self.report_check.append(t7)
         if self.bolt_dia_possible:
             t1 = (DISP_MIN_PITCH, cl_10_2_2_min_spacing(self.bolt.bolt_diameter_provided),
