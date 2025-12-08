@@ -316,13 +316,13 @@ class EndPlateConnection(ShearConnection):
             if self.supported_section.shear_yielding_capacity / 1000 > self.load.shear_force and \
                     self.supported_section.tension_yielding_capacity / 1000 > self.load.axial_force:
 
-                if self.load.shear_force <= min(round(0.15 * self.supported_section.shear_yielding_capacity / 1000, 0),
-                                                40.0):
+                vy_min_n = min(0.15 * self.supported_section.shear_yielding_capacity, 40000.0)  # N
+                vy_min_kn = vy_min_n / 1000  # Convert to kN
+                if self.load.shear_force < vy_min_kn:
                     logger.warning(" : The value of factored shear force is less than the minimum recommended value. "
                                    "Setting shear force value to 15% of supported beam shear capacity or 40 kN, whichever is lesser"
                                    "[Ref. IS 800:2007, Cl.10.7].")
-                    self.load.shear_force = min(round(0.15 * self.supported_section.shear_yielding_capacity / 1000, 0),
-                                                40.0)
+                    self.load.shear_force = vy_min_kn
 
                 print("Preliminary member check(s) have passed. Checking available bolt diameter(s).")
                 self.select_bolt_plate_arrangement(self)
@@ -343,13 +343,13 @@ class EndPlateConnection(ShearConnection):
                     self.supported_section.tension_yielding_capacity / 1000 > self.load.axial_force and \
                     self.supporting_section.tension_yielding_capacity / 1000 > self.load.shear_force:
 
-                if self.load.shear_force <= min(round(0.15 * self.supported_section.shear_yielding_capacity / 1000, 0),
-                                                40.0):
+                vy_min_n = min(0.15 * self.supported_section.shear_yielding_capacity, 40000.0)  # N
+                vy_min_kn = vy_min_n / 1000  # Convert to kN
+                if self.load.shear_force < vy_min_kn:
                     logger.warning(" : The value of factored shear force is less than the minimum recommended value. "
-                                   "Setting the value of the shear force to 15% of the supported beam shear capacity or 40 kN, whichever is lesser "
+                                   "Setting shear force value to 15% of supported beam shear capacity or 40 kN, whichever is lesser"
                                    "[Ref. IS 800:2007, Cl.10.7].")
-                    self.load.shear_force = min(round(0.15 * self.supported_section.shear_yielding_capacity / 1000, 0),
-                                                40.0)
+                    self.load.shear_force = vy_min_kn
                 print("Preliminary member check(s) have passed. Checking available bolt diameter(s).")
                 self.select_bolt_plate_arrangement(self)
 
@@ -1425,7 +1425,7 @@ class EndPlateConnection(ShearConnection):
         self.report_check.append(t1)
 
         a = self.supported_section
-        h = a.web_height
+        h = a.depth - 2 * (a.flange_thickness + a.root_radius)
         t = a.web_thickness
 
         t1 = (KEY_DISP_SHEAR_CAPACITY, self.load.shear_force,
@@ -1433,8 +1433,9 @@ class EndPlateConnection(ShearConnection):
               get_pass_fail(self.load.shear_force, round(a.shear_yielding_capacity/1000,2), relation="lesser"))
         self.report_check.append(t1)
 
+        Ag_gross = a.area
         t1 = (KEY_DISP_TENSION_CAPACITY, self.load.axial_force,
-              cl_6_2_tension_yield_capacity_member(h, t, a.fy, gamma_m0, round(a.tension_yielding_capacity, 2)),
+              cl_6_2_tension_yield_capacity_member(Ag_gross, 1, a.fy, gamma_m0, round(a.tension_yielding_capacity, 2)),
               get_pass_fail(self.load.axial_force, round(a.tension_yielding_capacity/1000, 2), relation="lesser"))
         self.report_check.append(t1)
 
@@ -1456,9 +1457,9 @@ class EndPlateConnection(ShearConnection):
             self.report_check.append(t1)
             t1 = (KEY_DISP_PLTHICK, '', self.plate.thickness_provided,'')
             self.report_check.append(t1)
-            t6 = (DISP_NUM_OF_COLUMNS, 2, self.plate.bolt_line, get_pass_fail(2, self.plate.bolt_line, relation='leq'))
+            t6 = (DISP_NUM_OF_COLUMNS, 2, self.plate.bolt_line, '')
             self.report_check.append(t6)
-            t7 = (DISP_NUM_OF_ROWS, '', self.plate.bolts_one_line, get_pass_fail(2, self.plate.bolts_one_line, relation='leq'))
+            t7 = (DISP_NUM_OF_ROWS, '', self.plate.bolts_one_line, '')
             self.report_check.append(t7)
             t1 = (DISP_MIN_PITCH, cl_10_2_2_min_spacing(self.bolt.bolt_diameter_provided),
                   self.plate.pitch_provided,
@@ -1485,9 +1486,9 @@ class EndPlateConnection(ShearConnection):
                   get_pass_fail(self.bolt.max_edge_dist, self.plate.edge_dist_provided, relation="geq"))
             self.report_check.append(t4)
 
-            g1 = 2 * (self.bolt.min_end_dist + self.weld.size) + self.supported_section.web_thickness
+            g1 = round_up(2 * (self.bolt.min_end_dist + self.weld.size) + self.supported_section.web_thickness, 2)
             if self.connectivity == VALUES_CONN_1[0]:
-                g2 = round(2 * (self.bolt.min_end_dist + self.supporting_section.root_radius)
+                g2 = round_up(2 * (self.bolt.min_end_dist + self.supporting_section.root_radius)
                            + self.supporting_section.web_thickness,2)
                 g_min = max(g1, g2)
             else:
@@ -1647,7 +1648,7 @@ class EndPlateConnection(ShearConnection):
             self.report_check.append(t1)
 
             if self.design_status_bolt is True:
-                self.min_plate_width = round(self.plate.gauge_provided+2*self.bolt.min_edge_dist, 2)
+                self.min_plate_width = round_up(self.plate.gauge_provided+2*self.bolt.min_edge_dist, 2)
 
 
                 t1 = (DISP_MIN_PLATE_WIDTH, ep_min_plate_width_req(self.plate.gauge_provided,self.bolt.min_edge_dist,
@@ -1657,10 +1658,10 @@ class EndPlateConnection(ShearConnection):
                 self.report_check.append(t1)
 
                 if self.connectivity == VALUES_CONN_1[0]:
-                    self.max_plate_width = self.supporting_section.flange_width
+                    self.max_plate_width = round(self.supporting_section.flange_width, 2)
                 elif self.connectivity == VALUES_CONN_1[1]:
-                    self.max_plate_width = self.supporting_section.depth - 2 * self.supporting_section.flange_thickness - \
-                              2 * self.supporting_section.root_radius
+                    self.max_plate_width = round(self.supporting_section.depth - 2 * self.supporting_section.flange_thickness - \
+                                 2 * self.supporting_section.root_radius, 2)
                 else:
                     self.max_plate_width = 'N/A'
 
