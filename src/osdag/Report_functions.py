@@ -1770,22 +1770,24 @@ def AISC_J4_shear_rupture_capacity_member(h, t, n_r, d_o, fu, v_dn, gamma_m1=1.2
     return shear_rup_eqn
 
 
-def cl_9_3_combined_moment_axial_IR_section(M, M_d, N, N_d, IR, type=None):
+def cl_9_3_combined_moment_axial_IR_section(M, M_d, N, N_d, IR, type=None, clause_ref='Cl. 9.3.1.1'):
     """
-    Calculate
+    Calculate interaction ratio for combined moment and axial force
+    
     Args:
          M: Moment acting on section in KN-mm (float)
-         M_d:Moment capacity of the section in KN-mm (float)
+         M_d: Moment capacity of the section in KN-mm (float)
          N: Axial force acting on section in KN (float)
-         N_d:Tension capacity of the plate in KN (float)
+         N_d: Tension capacity of the plate in KN (float)
          IR: Interaction ratio for combined moment and axial load (no units)
+         type: Type of IR equation - None for linear, 'squared' for squared
+         clause_ref: IS 800:2007 clause reference (default: 'Cl. 9.3.1.1')
+    
     Returns:
-        mom_axial_IR_eqn: Equation to calculate IR
+        mom_axial_IR_eqn: Equation to calculate IR with clause reference
+    
     Note:
-            Reference:
-            IS 800:2007,  cl 9.3
-
-
+        Reference: IS 800:2007, Cl. 9.3
     """
     M = str(M)
     M_d = str(M_d)
@@ -1796,11 +1798,14 @@ def cl_9_3_combined_moment_axial_IR_section(M, M_d, N, N_d, IR, type=None):
 
     if type == None:
         mom_axial_IR_eqn.append(NoEscape(r'\begin{aligned} &\frac{' + M + '}{' + M_d + r'}+\frac{' + N + '}{' + N_d + '}=' + IR + r'\\ \\'))
-        mom_axial_IR_eqn.append(NoEscape(r'& [\text{Ref. IS 800:2007, Cl.10.7}] \end{aligned}'))
+        mom_axial_IR_eqn.append(NoEscape(r'& [\text{Ref. IS 800:2007, ' + clause_ref + r'}] \end{aligned}'))
     elif type == 'squared':
         mom_axial_IR_eqn.append(NoEscape(r'\begin{aligned} &(\frac{' + M + '}{' + M_d + r'})^2+(\frac{' + N + '}{' + N_d + '})^2=' + IR + r'\\ \\'))
-        mom_axial_IR_eqn.append(NoEscape(r'& [\text{Ref. IS 800:2007, Cl.10.7}] \end{aligned}'))
+        mom_axial_IR_eqn.append(NoEscape(r'& [\text{Ref. IS 800:2007, ' + clause_ref + r'}] \end{aligned}'))
+    
     return mom_axial_IR_eqn
+
+
 
 
 def cl_10_2_2_min_spacing(d, parameter='pitch'):  # Todo:write condition for pitch and gauge
@@ -1835,16 +1840,18 @@ def cl_10_2_2_min_spacing(d, parameter='pitch'):  # Todo:write condition for pit
     return min_pitch_eqn
 
 
-def cl_10_2_3_1_max_spacing(t, parameter=''):  # TODO:write condition for pitch and gauge
+def cl_10_2_3_1_max_spacing(t, parameter=''):
     """
-     Calculate the maximum pitch distance
-     Args:
-         t: Thickness of thinner plate in mm (float)
-     Returns:
-           Max pitch in mm (float)
-     Note:
-            Reference:
-            IS 800:2007,  cl. 10.2.3
+    Calculate the maximum pitch/gauge distance
+    Args:
+        t: Thickness of thinner plate in mm (list/tuple of floats)
+        parameter: 'pitch' for Cl. 10.2.3.2, 'gauge' for Cl. 10.2.3.1
+    Returns:
+        Max pitch/gauge in mm (Math equation)
+    Note:
+        Reference:
+        IS 800:2007, Cl. 10.2.3.1 (gauge - perpendicular to force)
+        IS 800:2007, Cl. 10.2.3.2 (pitch - along force direction)
     """
     t1 = str(t[0])
     t2 = str(t[1])
@@ -1853,23 +1860,29 @@ def cl_10_2_3_1_max_spacing(t, parameter=''):  # TODO:write condition for pitch 
     max_pitch = min(max_pitch_1, max_pitch_2)
     t = str(min(t))
     max_pitch = str(max_pitch)
+    
     max_pitch_eqn = Math(inline=True)
+    
     if parameter == 'pitch':
         max_pitch_eqn.append(NoEscape(r'\begin{aligned}p_{\max}&=\min(32t,~300)\\'))
+        clause_ref = r'Cl.10.2.3.2'  # Pitch is 10.2.3.2
     elif parameter == 'gauge':
         max_pitch_eqn.append(NoEscape(r'\begin{aligned}g_{\max}&=\min(32t,~300)\\'))
+        clause_ref = r'Cl.10.2.3.1'  # Gauge is 10.2.3.1
     else:
         max_pitch_eqn.append(NoEscape(r'\begin{aligned}p/g_{\max}&=\min(32t,~300)\\'))
-
+        clause_ref = r'Cl.10.2.3'
+    
     max_pitch_eqn.append(NoEscape(r'&=\min(32\times' + t + r',~ 300) \\'))
     max_pitch_eqn.append(NoEscape(r'&=\min(' + str(max_pitch_1) + r',~ 300) \\'))
     max_pitch_eqn.append(NoEscape(r'&=' + max_pitch + r' \\ \\'))
-
     max_pitch_eqn.append(NoEscape(r'\text{Where},~t &= \min(' + t1 + ',' + t2 + r')\\ \\'))
-
-    max_pitch_eqn.append(NoEscape(r'& [\text{Ref. IS 800:2007, Cl.10.2.3}] \end{aligned}'))
-
+    
+    # Use specific clause reference based on parameter
+    max_pitch_eqn.append(NoEscape(r'& [\text{Ref. IS 800:2007, ' + clause_ref + r'}] \end{aligned}'))
+    
     return max_pitch_eqn
+
 
 
 # def cl_10_2_4_2_min_edge_end_dist(d_0, edge_type='Sheared or hand flame cut', parameter='end_dist'):
@@ -4898,7 +4911,7 @@ def min_plate_length_req(min_pitch, min_end_dist, bolt_line, min_length):
     bolt_line = str(bolt_line)
     min_length = str(min_length)
     min_plate_length_eqn = Math(inline=True)
-    min_plate_length_eqn.append(NoEscape(r'\begin{aligned} &2e_{\text{min}} + (n_c-1) p_{\text{min}})\\'))
+    min_plate_length_eqn.append(NoEscape(r'\begin{aligned} &2e_{\text{prov}} + (n_c-1) p_{\text{prov}})\\'))
     min_plate_length_eqn.append(NoEscape(r'&=2\times' + min_end_dist + '+(' + bolt_line + r'-1)  \times  ' + min_pitch + r'\\'))
     min_plate_length_eqn.append(NoEscape(r'&=' + min_length + '\end{aligned}'))
     return min_plate_length_eqn

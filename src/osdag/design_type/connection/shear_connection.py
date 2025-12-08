@@ -575,8 +575,8 @@ class ShearConnection(Connection):
         # 0.6 is multiplied for shear yielding capacity to keep the section in low shear
         self.supported_section.shear_yielding_capacity = IS800_2007.cl_8_4_design_shear_strength(A_g,
                                                                                                        self.supported_section.fy)
-        self.supported_section.tension_yielding_capacity = IS800_2007.cl_6_2_tension_yielding_strength(A_g,
-                                                                                                       self.supported_section.fy)
+        self.supported_section.tension_yielding_capacity = IS800_2007.cl_6_2_tension_yielding_strength(self.supported_section.area,
+    self.supported_section.fy)
 
         print(self.supported_section.shear_yielding_capacity, self.load.shear_force,
               self.supported_section.tension_yielding_capacity, self.load.axial_force)
