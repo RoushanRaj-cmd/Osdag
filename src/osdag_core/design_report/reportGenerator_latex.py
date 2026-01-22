@@ -1,4 +1,4 @@
-import os
+import os, shutil
 import sys
 import time
 import datetime
@@ -22,8 +22,6 @@ from pylatex.utils import NoEscape
 
 # from ..Common import *
 # from ..utils.common import component
-os.environ['TEXMFHOME'] = os.path.abspath("data/ResourceFiles/osdag-latex-env/texmf-dist")
-os.environ["TEXINPUTS"] = os.path.abspath("data/ResourceFiles/osdag-latex-env/texmf-dist") + os.pathsep + os.environ.get("TEXINPUTS", "")
 
 class CreateLatex(Document):
 
@@ -31,8 +29,7 @@ class CreateLatex(Document):
         super().__init__()
 
     def save_latex(self, uiObj, Design_Check, reportsummary, filename, rel_path, Disp_2d_image, Disp_3d_image, module=''):
-        os.environ['TEXMFHOME'] = os.path.abspath("data/ResourceFiles/osdag-latex-env/texmf-dist")
-        os.environ["TEXINPUTS"] = os.path.abspath("data/ResourceFiles/osdag-latex-env/texmf-dist") + os.pathsep + os.environ.get("TEXINPUTS", "")
+        configure_latex_runtime_windows()
 
         companyname = str(reportsummary["ProfileSummary"]['CompanyName'])
         companylogo = str(reportsummary["ProfileSummary"]['CompanyLogo'])
@@ -45,14 +42,6 @@ class CreateLatex(Document):
 
         does_design_exist = reportsummary['does_design_exist']
         pkg_images = files("osdag_core.data.ResourceFiles.images")
-
-        os.environ['TEXMFHOME'] = os.path.abspath("data/ResourceFiles/osdag-latex-env/texmf-dist")
-        sty_pkgs = str(files("osdag_core.data.ResourceFiles.osdag-latex-env.texmf-dist.tex.latex")).replace("\\", "/")
-        pkg_resources = [f'{sty_pkgs}/amsmath', f'{sty_pkgs}/graphics', f'{sty_pkgs}/needspace']
-        texinp = os.environ.get('TEXINPUTS', ' ')
-
-        pkg_path = ";".join(pkg_resources)
-        os.environ['TEXINPUTS'] = f'{pkg_path};{texinp}'
 
         imgpath_osdagheader = str(pkg_images.joinpath("Osdag_header_report.png")).replace("\\", "/")
         # Add document header
@@ -543,25 +532,7 @@ class CreateLatex(Document):
         except Exception as e:
             pass
             
-def get_latex_executable():
-    script_dir = os.path.dirname(os.path.abspath(__file__))
-
-    # Go one level up to reach the parent directory
-    osdag_dir = os.path.dirname(script_dir)
-
-    latex_env =  os.path.join(osdag_dir, "data", "ResourceFiles", "osdag-latex-env")
-    if not os.path.isdir(latex_env):
-        return "pdflatex"  # Fallback to system pdflatex if the custom environment is not found
-    
-    # Construct the path to pdflatex.exe
-    latex_executable = os.path.join(osdag_dir, "data", "ResourceFiles", "osdag-latex-env", "bin", "windows", "pdflatex.exe")
-    if not os.path.isfile(latex_executable):
-        print(f"[ERROR] LaTeX executable not found at {latex_executable}. Falling back to system pdflatex.")
-        return "pdflatex"  
-    
-    # Ensure the path is absolute
-    latex_executable = os.path.abspath(latex_executable)
-    return latex_executable
+  
 
 def color_cell(cellcolor,celltext):
     string = NoEscape(r'\cellcolor{'+cellcolor+r'}{'+celltext+r'}')
