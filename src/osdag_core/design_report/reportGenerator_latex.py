@@ -464,7 +464,7 @@ class CreateLatex(Document):
             view_topimg_path = rel_path + Disp_top_image
             view_sideimg_path = rel_path + Disp_side_image
             view_frontimg_path = rel_path + Disp_front_image
-            with doc.create(Section('3D Views')):
+            with doc.create(Section('Views')):
                 with doc.create(Tabularx(r'|>{\centering}X|>{\centering\arraybackslash}X|', row_height=1.1)) as table:
                     view_3dimg_path = rel_path + Disp_3d_image
                     view_topimg_path = rel_path + Disp_top_image
@@ -493,7 +493,7 @@ class CreateLatex(Document):
             view_topimg_path = imgpath_broken
             view_sideimg_path = imgpath_broken
             view_frontimg_path = imgpath_broken
-            with doc.create(Section('3D Views')):
+            with doc.create(Section('Views')):
                 with doc.create(Tabularx(r'|>{\centering}X|>{\centering\arraybackslash}X|', row_height=1.1)) as table:
                     view_3dimg_path = imgpath_broken
                     view_topimg_path = imgpath_broken
@@ -522,6 +522,15 @@ class CreateLatex(Document):
                 else:
                     continue
                 doc.append(TextColor(colour,'\n'+msg))
+        
+        doc.append(pyl.Command('vspace', arguments='10mm'))
+        with doc.create(Tabularx('|X|', row_height=1.5)) as table:
+            table.add_hline()
+            table.add_row((MultiColumn(1, align='|c|', data=bold('Note')),), color='OsdagGreen')
+            table.add_hline()
+            table.add_row([NoEscape(r'The sharing of unabridged Osdag design reports is encouraged between the designer and the reviewer for clarity (on code compliance) and openness. The output from Osdag shall be owned by the individual structural designer, and the designer also remains responsible for the final design submitted to the client, along with associated documents.')])
+            table.add_hline()
+
         try:
             latex_executable = get_latex_executable()
             doc.generate_pdf(filename, compiler=latex_executable, clean_tex = False)

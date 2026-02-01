@@ -1607,7 +1607,7 @@ KEY_DISP_FLANGE_T = 'Flange Thickness, T (mm)*'
 KEY_DISP_WEB_HEIGHT = 'Web Height, D (mm*)'
 KEY_DISP_WEB_T = 'Web Thickness, t (mm)*'
 KEY_DISP_FLANGE_S = 'Flange Slope, α (deg.)*'
-KEY_DISP_FLANGE_S_REPORT = 'Flange Slope'
+KEY_DISP_FLANGE_S_REPORT = 'Flange Slope ($\\alpha$)'
 KEY_DISP_ROOT_R = 'Root Radius, R1 (mm)*'
 KEY_DISP_TOE_R = 'Toe Radius, R2 (mm)*'
 KEY_DISP_TYPE = 'Type'
@@ -1651,8 +1651,8 @@ KEY_DISP_BASE_PLATE_FU = 'Ultimate Strength, Fu (MPa)'
 KEY_DSIP_BASE_PLATE_FY = 'Yield Strength , Fy (MPa)'
 KEY_DISP_ST_SK_FU = 'Ultimate Strength, Fu (MPa)'
 KEY_DSIP_ST_SK_FY = 'Yield Strength , Fy (MPa)'
-KEY_DISP_ULTIMATE_STRENGTH_REPORT = 'Ultimate Strength, $F_u$ (MPa)'
-KEY_DISP_YIELD_STRENGTH_REPORT = 'Yield Strength, $F_y$ (MPa)'
+KEY_DISP_ULTIMATE_STRENGTH_REPORT = 'Ultimate Strength, $f_u$ (MPa)'
+KEY_DISP_YIELD_STRENGTH_REPORT = 'Yield Strength, $f_y$ (MPa)'
 
 # Common keys for design report
 
@@ -1689,7 +1689,7 @@ KEY_REPORT_NB = 'Nominal bore, NB (mm)'
 KEY_REPORT_OD = 'Out diameter, OD (mm)'
 
 # Design cheks
-KEY_REPORT_DIAMETER = 'Diameter $(mm)$'
+KEY_REPORT_DIAMETER = 'Diameter (mm)'
 KEY_REPORT_BOLT_NOS = 'Number of Bolts'
 KEY_REPORT_PROPERTY_CLASS = 'Property Class'
 KEY_REPORT_MIN_END = 'Min. End Distance $(mm)$'
